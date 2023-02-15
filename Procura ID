@@ -1,0 +1,36 @@
+CREATE OR REPLACE PROCEDURE P_PROCURAID_ZTAB
+  (pid_cliente          IN Z_TABELA_EXERCICIO.Id_Cliente%type,
+   pnome                OUT NOCOPY Z_TABELA_EXERCICIO.Nome%type,
+   pnumero              OUT NOCOPY Z_TABELA_EXERCICIO.Numero%type,
+   pCNPJ                OUT NOCOPY Z_TABELA_EXERCICIO.Cnpj%type,
+   pvalor_investido     OUT NOCOPY Z_TABELA_EXERCICIO.Valor_Investido%type )
+IS 
+  -- Nenhuma variável declarada
+BEGIN
+  
+  --O Programa procura o id do cliente na tabela e retorna os resultados
+  SELECT
+    
+    te.nome,
+    te.numero,
+    te.cnpj,
+    te.valor_investido
+    
+  INTO 
+  
+            
+   pnome ,             
+   pnumero,             
+   pCNPJ ,            
+   pvalor_investido   
+     
+  FROM Z_TABELA_EXERCICIO te
+  WHERE id_cliente = pid_cliente;
+  
+EXCEPTION
+  
+  WHEN NO_DATA_FOUND THEN
+     RAISE_APPLICATION_ERROR(-20001, 'Empregado Não existe: ' || pid_cliente);
+  WHEN OTHERS THEN
+     RAISE_APPLICATION_ERROR(-20002, 'Erro Oracle ' || SQLCODE || SQLERRM);
+END;
