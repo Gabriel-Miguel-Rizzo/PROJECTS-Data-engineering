@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE P_PROCURAID_ZTAB
+CREATE OR REPLACE PROCEDURE P_CONSULTA_ID
   (pid_cliente          IN Z_TABELA_EXERCICIO.Id_Cliente%type,
    pnome                OUT NOCOPY Z_TABELA_EXERCICIO.Nome%type,
    pnumero              OUT NOCOPY Z_TABELA_EXERCICIO.Numero%type,
