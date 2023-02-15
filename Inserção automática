@@ -1,0 +1,32 @@
+CREATE OR REPLACE PROCEDURE Z_INSERE_ZTAB
+  (v_nome               IN  z_tabela_exercicio.nome%type        ,
+   v_numero             IN  z_tabela_exercicio.numero%type      ,
+   v_id_cliente         IN  z_tabela_exercicio.id_cliente%type  ,
+   v_CNPJ               IN  z_tabela_exercicio.cnpj%type        ,
+   v_valor_investido    IN  z_tabela_exercicio.valor_investido%type
+   )
+IS 
+  -- Nenhuma váriável declarada
+BEGIN
+  -- O programa insere tuplas (linhas) na tabela z_tabela_exercicio
+  
+  INSERT INTO z_tabela_exercicio (
+    nome,
+    numero,
+    id_cliente,
+    CNPJ,
+    valor_investido
+    )
+    
+    
+  VALUES (
+   v_nome       ,            
+   v_numero     ,        
+   v_id_cliente ,      
+   v_CNPJ       ,          
+   v_valor_investido  );
+   
+EXCEPTION
+  WHEN OTHERS THEN
+     RAISE_APPLICATION_ERROR(-20001, 'Erro Oracle ' || SQLCODE || SQLERRM);
+END;
