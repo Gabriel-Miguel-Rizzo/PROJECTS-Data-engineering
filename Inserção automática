@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE Z_INSERE_ZTAB
+CREATE OR REPLACE PROCEDURE P_INSERE_ZTAB
   (v_nome               IN  z_tabela_exercicio.nome%type        ,
    v_numero             IN  z_tabela_exercicio.numero%type      ,
    v_id_cliente         IN  z_tabela_exercicio.id_cliente%type  ,
