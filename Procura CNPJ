@@ -1,0 +1,66 @@
+CREATE OR REPLACE PROCEDURE P_CONSULTA_CNPJ
+  (pcnpj             IN   VARCHAR2,
+   prazao_social     OUT  VARCHAR2,
+   puf               OUT  VARCHAR2,
+   pporte            OUT  VARCHAR2,
+   pmunicipio        OUT  VARCHAR2,
+   pbairro           OUT  VARCHAR2,
+   pdtfundacao       OUT  DATE)
+
+--É possível usar NOCOPY aqui para diminuir o processamento do oracle.  
+--Procedure funcional que devolve: razao_social, uf, porte, municipio, bairro e dtfundacao com base no CNPJ
+IS 
+ 
+BEGIN
+
+select "Razao Social", "UF", "Porte", "Municipio", "Bairro", "Data Fundação"--, "CNPJ"
+
+
+ into 
+
+   prazao_social     ,
+   puf               ,
+   pporte            ,
+   pmunicipio        ,
+   pbairro           ,
+   pdtfundacao      
+   
+   from (select ecrd.prop_razao_social "Razao Social", ecrd.prop_uf "UF", ecrd.porte "Porte", ecrd.prop_municipio "Municipio", ecrd.dsbairro "Bairro", ecrd.dtfundacao "Data Fundação",ecrd.prop_cnpj "CNPJ" 
+from t_dplan_binovo_dim_empresa_crd ecrd
+
+UNION
+
+select pdb.prop_razao_social, pdb.prop_uf, NULL, pdb.prop_municipio, NULL, pdb.dtfundacao, pdb.prop_cnpj
+from dagi_finep30dias_proj_dbruto pdb
+
+UNION
+
+select b.razaosocial, ende.uf, NULL, ende.municipio, ende.bairro, NULL, b.cnpj
+from 
+inovacred_owner.operacao op
+
+inner join inovacred_owner.beneficiario b
+on op.beneficiario_id = b.id  --2428
+
+inner join inovacred_owner.endereco ende
+on b.endereco_id = ende.id  --2428
+
+
+UNION
+
+select app.nmpessoa, app.sguf, NULL, app.nmmunicipio, app.nmbairro, NULL, formata_cnpj(app.nrcnpj)
+from v_associa_pessoa_projeto app 
+
+)tab1
+
+where 
+tab1."CNPJ" = pcnpj and
+rownum = 1;
+
+
+
+
+EXCEPTION
+  WHEN OTHERS THEN 
+    RAISE_APPLICATION_ERROR(-20002, 'Erro Oracle ' || SQLCODE || ' - ' || SQLERRM);
+END;
