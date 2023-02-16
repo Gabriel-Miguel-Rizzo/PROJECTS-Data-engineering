@@ -1,0 +1,51 @@
+CREATE OR REPLACE PROCEDURE Z_PROCURAID_ZTAB_GABTESTE
+  (pid_cliente          IN Z_TABELA_EXERCICIO.Id_Cliente%type)
+  
+  
+IS 
+  
+   pnome                Z_TABELA_EXERCICIO.Nome%type;
+   pnumero              Z_TABELA_EXERCICIO.Numero%type;
+   pCNPJ                Z_TABELA_EXERCICIO.Cnpj%type;
+   pvalor_investido     Z_TABELA_EXERCICIO.Valor_Investido%type;
+
+
+BEGIN
+  
+  --O Programa procura o id do cliente na tabela e retorna os resultados
+  SELECT
+    
+    te.nome,
+    te.numero,
+    te.cnpj,
+    te.valor_investido
+    
+  INTO 
+  
+            
+   pnome ,             
+   pnumero,             
+   pCNPJ ,            
+   pvalor_investido   
+     
+  FROM Z_TABELA_EXERCICIO te
+  WHERE id_cliente = pid_cliente;
+  
+
+DBMS_OUTPUT.PUT_LINE('Nome: ' || pnome);
+
+DBMS_OUTPUT.PUT_LINE('Numero: ' || pnumero );
+
+DBMS_OUTPUT.PUT_LINE('CNPJ: ' || pCNPJ  );
+
+DBMS_OUTPUT.PUT_LINE('Valor_investido: ' || pvalor_investido);
+
+
+  
+EXCEPTION
+  
+  WHEN NO_DATA_FOUND THEN
+     RAISE_APPLICATION_ERROR(-20001, 'Empregado Não existe: ' || pid_cliente);
+  WHEN OTHERS THEN
+     RAISE_APPLICATION_ERROR(-20002, 'Erro Oracle ' || SQLCODE || SQLERRM);
+END;
