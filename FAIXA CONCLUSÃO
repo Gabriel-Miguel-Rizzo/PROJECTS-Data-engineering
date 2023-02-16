@@ -1,0 +1,35 @@
+CREATE OR REPLACE FUNCTION Z_CRIAFAIXA_CONCLUSAO
+(numero_Faixa   IN VARCHAR2)
+RETURN VARCHAR2
+
+IS
+faixa_Conclusão VARCHAR2(6);
+
+BEGIN
+
+CASE 
+  
+  WHEN numero_Faixa >= 0 and numero_Faixa < 20
+  THEN faixa_Conclusão := '0-20';
+  
+  WHEN numero_Faixa >= 20 and numero_Faixa < 40
+  THEN faixa_Conclusão := '20-40';
+    
+  WHEN numero_Faixa >= 40 and numero_Faixa < 60
+  THEN faixa_Conclusão := '40-60';
+  
+  WHEN numero_Faixa >= 60 and numero_Faixa < 80
+  THEN faixa_Conclusão := '60-80';
+  
+  WHEN numero_Faixa >= 80 and numero_Faixa <= 100
+  THEN faixa_Conclusão := '80-100';
+  
+  END CASE;
+  RETURN (faixa_Conclusão);
+  
+EXCEPTION
+  
+  WHEN OTHERS THEN
+    RAISE_APPLICATION_ERROR(-20002, 'Erro Oracle ' || SQLCODE || ' - ' || SQLERRM);
+END;
+  
