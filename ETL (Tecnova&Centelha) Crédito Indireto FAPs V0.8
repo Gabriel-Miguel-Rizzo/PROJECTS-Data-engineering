@@ -1,0 +1,347 @@
+create or replace procedure p_binovo_gpds_atualiza_estrela (p_uf in varchar2, p_programa in varchar2) as  -- cria a procedure para carregar o tabela de carga para as fap's
+
+/*
+18/12/2022 : Sandro 
+Inseri o parametro p_programa e inclui nos deletes 
+ - Exemplo RS que tem 2 arquivos - TECNOVA e CENTELHA. Um estava apagando o conteudo do outro
+*/
+ --f_dplan_binovo_get_dia_utl_ant(trunc(sysdate)), -- data da posição da ultima carga realizada    ---> codigo que poderá ser utilizado para o nosso grafico.
+ --v_id_fap number;
+begin
+
+  
+  
+-- dimensao empresa
+    delete from t_binovo_gpds_dim_empresa de
+    where de.uf = p_uf
+    -- sandro 18/12
+    and exists ( select 1 
+                  from t_binovo_gpds_fato_contr fc 
+                  inner join t_binovo_gpds_dim_projeto dp
+                  on dp.refe = fc.refe
+                  where fc.cnpj = de.cnpj
+                  and dp.programa = p_programa);
+   
+    insert into t_binovo_gpds_dim_empresa (cnpj, razao_social, endereço, municipio, uf, regiao, celular, cnae, cnae_secao, cnae_divisao, porte, nm_proponente, email_proponente)
+    select 
+           case
+             when fp.cnpj like '%20.986.943/0001-42' then '20.986.943/0001-42'
+             when length(fp.cnpj) = 18 then fp.cnpj
+             when length(fp.cnpj) = 14 then formata_cnpj(fp.cnpj)
+             when length(fp.cnpj) = 13 then formata_cnpj('0' || fp.cnpj)
+             else
+               fp.cnpj
+           end,
+           upper(fp.nome_empresa) ,
+           upper(fp.endereco),
+           upper(fp.municipio),
+           fp.uf_empresa ,
+           re.sgregiao , 
+           fp.celular ,
+           
+--           fp.cnae,
+           
+           FORMATA_CNAE(substr(REPLACE(REPLACE(REPLACE(fp.cnae,'/',''),'-',''),'.',''),1,5)),
+           
+           sec.dsdenominacao ,
+           div.dsdenominacao ,
+           case 
+             when upper(fp.programa) like '%CENTELHA%' then 'Micro\Peq Porte'
+             when upper(fp.programa) like '%TECNOVA%' and fp.porte in ('Microempresa e Empresa de Pequeno Porte (EPP)',
+               'Micro Empresa e Empresa de Pequeno Porte') then 'Micro\Peq Porte'
+             when upper(fp.programa) like '%TECNOVA%' and fp.porte = 'Pequena Empresa' then 'Pequena'
+             when upper(fp.programa) like '%TECNOVA%' and fp.porte is null then 'Não Informado'
+           end, 
+          
+             /* - O valor "Microempresa e Empresa de Pequeno Porte (EPP)" , para o modelo estrela, deverá ser substituído por "Micro\Peq Porte"
+   - O valor "Pequena empresa" , para o modelo estrela, deverá ser substituído por "Pequena"
+  No caso do CENTELHA
+   - como este campo não tem no layout, gravar, para o modelo estrela, para qualquer empresa o valor "Micro\Peq Porte"*/
+           upper(fp.nm_proponente),
+           lower(fp.email_proponente)
+       
+           
+        
+
+   from t_binovo_gpds_carga_fap fp
+
+   inner join uf
+   on uf.sguf = fp.uf_empresa
+
+   inner join regiao re
+   on re.cdregiao = uf.cdregiao
+
+
+   --inner (sandro 18/12 : tinha um caso de Goias que a empresa estava sem CNAE - não estava carregabdo a empresa)
+   left join tab_estrut_cnae20 div
+   on substr(fp.cnae,1,2) = div.cddivisao
+   and div.cdgrupo is null
+
+   --inner (sandro 18/12 : tinha um caso de Goias que a empresa estava sem CNAE - não estava carregabdo a empresa)
+       left join tab_estrut_cnae20 sec
+   on sec.cdsecao = div.cdsecao
+   and sec.cddivisao is null
+   and sec.cdgrupo is null;
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------/*
+/*   
+   select df.id_fap
+   into v_id_fap
+   from t_binovo_gpds_dim_fap df
+   where df.uf_fap = p_uf;
+
+   delete from t_binovo_gpds_dim_projeto dp
+   where exists ( select 1 
+                  from t_binovo_gpds_fato_contr fc 
+                  where fc.refe = dp.refe
+                  and fc.id_fap = v_id_fap);
+
+   delete from t_binovo_gpds_dim_projeto dp
+   where dp.refe in (select fc.refe from t_binovo_gpds_fato_contr fc 
+                  where fc.id_fap = v_id_fap);
+*/
+
+   delete from t_binovo_gpds_dim_projeto dp
+   where exists ( select 1 
+                  from t_binovo_gpds_fato_contr fc 
+                  inner join t_binovo_gpds_dim_fap df
+                  on df.id_fap = fc.id_fap
+                  where fc.refe = dp.refe
+                  and df.uf_fap = p_uf)
+-- sandro 18/12
+   and dp.programa = p_programa;
+                  
+
+    insert into t_binovo_gpds_dim_projeto (programa, refe, nm_coordenador, email_coordenador, titulo, objetivo, area_tematica, aprovado_suplente, nu_parc_aprovada, dtass_contrato,
+    dttermino, nu_parc_lib, perc_conclusao, probl_desvios, acoes_prop_parceiro, ds_sumaria, status, obs_projeto, faixa_conclusao)
+    
+
+
+    select
+    fp.programa,
+    fp.refe,
+    upper(fp.nm_coordenador),
+    lower(fp.email_coordenador),
+    fp.titulo_projeto,
+    fp.objetivo, 
+    nvl(fp.area_tematica,'Não informado'),
+    fp.aprovado_suplente,
+    nvl(fp.nu_parc_aprovada,0),
+    nvl(fp.dt_ass_contrato,to_date('01/01/1900','dd/mm/yyyy')),
+    nvl(fp.dt_termino,to_date('01/01/1900','dd/mm/yyyy')),
+    -- "Nº de Parcelas Liberadas" : calcular, para o modelo estrela, a partir dos dados das liberações
+    case 
+      when upper(fp.programa) like '%CENTELHA%' then 
+       decode(fp.dt_pri_liberacao,NULL,0,1) + decode(fp.dt_seg_liberacao,NULL,0,1) + decode(fp.dt_ter_liberacao,NULL,0,1) + decode(fp.dt_qua_liberacao,NULL,0,1)
+       else 
+         nvl(fp.nu_parc_lib,0)
+    end, 
+    nvl(fp.perc_conclusao,0), 
+    fp.probl_desv_projeto,
+    fp.acoes_prop_parc,
+    fp.ds_sumaria_res,
+    case
+      when fp.status = 'EM ANDAMENTO' then 'Em andamento'
+      when fp.status = 'CANCELADO' then 'Cancelado' 
+      when fp.status = 'CONCLUÍDO' then 'Concluído'
+      when fp.status is null then 'Não informado'
+     else fp.status
+     end,
+     fp.obs_projeto,
+    case
+      when fp.perc_conclusao  is null then '0-20'
+      when fp.perc_conclusao  <= 0.2 then '0-20'
+      when fp.perc_conclusao  > 0.2 and fp.perc_conclusao <= 0.4 then '21-40'
+      when fp.perc_conclusao  > 0.4 and fp.perc_conclusao <=  0.6 then '41-60'
+      when fp.perc_conclusao  > 0.6 and fp.perc_conclusao <=  0.8 then '61-80'
+      when fp.perc_conclusao  > 0.8 and fp.perc_conclusao <=  1 then '81-100'
+    end
+
+   from t_binovo_gpds_carga_fap fp;
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+   --delete from t_binovo_gpds_fato_liber;
+   
+   delete from t_binovo_gpds_fato_liber fl
+   where exists ( select 1 
+                  from t_binovo_gpds_dim_fap df
+                  where df.id_fap = fl.id_fap
+                  and df.uf_fap = p_uf)
+-- sandro 18/12
+     and exists ( select 1 
+                  from t_binovo_gpds_dim_projeto dp
+                  where dp.refe = fl.refe
+                  and dp.programa = p_programa);  
+
+   insert into t_binovo_gpds_fato_liber (refe, cnpj, id_fap, dt_liberacao, vl_liberacao)
+
+  --1a liberacao
+    select
+    carga.refe,
+    case
+      when carga.cnpj like '%20.986.943/0001-42' then '20.986.943/0001-42'
+      when length(carga.cnpj) = 18 then carga.cnpj
+      when length(carga.cnpj) = 14 then formata_cnpj(carga.cnpj)
+      when length(carga.cnpj) = 13 then formata_cnpj('0' || carga.cnpj)
+      else
+        carga.cnpj
+    end,
+    
+    fap.id_fap, --id_fap
+    carga.dt_pri_liberacao, --dt_liberacao
+    round(carga.vl_pri_liberacao,2) --vl_liberacao
+
+
+   from t_binovo_gpds_carga_fap carga
+   
+   
+       inner join T_BINOVO_GPDS_DIM_FAP fap
+       on fap.uf_fap = carga.uf_empresa
+       
+   where carga.dt_pri_liberacao is not null;  
+   
+ --2a liberacao  
+ insert into t_binovo_gpds_fato_liber (refe, cnpj, id_fap, dt_liberacao, vl_liberacao)
+      select
+    carga.refe,
+    case
+      when carga.cnpj like '%20.986.943/0001-42' then '20.986.943/0001-42'
+      when length(carga.cnpj) = 18 then carga.cnpj
+      when length(carga.cnpj) = 14 then formata_cnpj(carga.cnpj)
+      when length(carga.cnpj) = 13 then formata_cnpj('0' || carga.cnpj)
+      else
+        carga.cnpj
+    end,
+
+    fap.id_fap, --id_fap
+    carga.dt_seg_liberacao, --dt_liberacao
+    round(carga.vl_seg_liberacao,2) --vl_liberacao
+
+
+   from t_binovo_gpds_carga_fap carga
+   
+   
+       inner join T_BINOVO_GPDS_DIM_FAP fap
+       on fap.uf_fap = carga.uf_empresa
+       
+   where carga.dt_seg_liberacao is not null; 
+   
+   --3a liberacao 
+   
+   insert into t_binovo_gpds_fato_liber (refe, cnpj, id_fap, dt_liberacao, vl_liberacao)
+       select
+    carga.refe,
+    case
+      when carga.cnpj like '%20.986.943/0001-42' then '20.986.943/0001-42'
+      when length(carga.cnpj) = 18 then carga.cnpj
+      when length(carga.cnpj) = 14 then formata_cnpj(carga.cnpj)
+      when length(carga.cnpj) = 13 then formata_cnpj('0' || carga.cnpj)
+      else
+        carga.cnpj
+    end,
+    fap.id_fap, --id_fap
+    carga.dt_ter_liberacao, --dt_liberacao
+    round(carga.vl_ter_liberacao,2) --vl_liberacao
+
+
+   from t_binovo_gpds_carga_fap carga
+   
+   
+       inner join T_BINOVO_GPDS_DIM_FAP fap
+       on fap.uf_fap = carga.uf_empresa
+       
+   where carga.dt_ter_liberacao is not null; 
+   
+   --4a liberacao
+   
+   insert into t_binovo_gpds_fato_liber (refe, cnpj, id_fap, dt_liberacao, vl_liberacao)
+       select
+    carga.refe,
+    case
+      when carga.cnpj like '%20.986.943/0001-42' then '20.986.943/0001-42'
+      when length(carga.cnpj) = 18 then carga.cnpj
+      when length(carga.cnpj) = 14 then formata_cnpj(carga.cnpj)
+      when length(carga.cnpj) = 13 then formata_cnpj('0' || carga.cnpj)
+      else
+        carga.cnpj
+    end,
+    fap.id_fap, --id_fap
+    carga.dt_qua_liberacao, --dt_liberacao
+    round(carga.vl_qua_liberacao,2) --vl_liberacao
+
+
+   from t_binovo_gpds_carga_fap carga
+   
+   
+       inner join T_BINOVO_GPDS_DIM_FAP fap
+       on fap.uf_fap = carga.uf_empresa
+       
+   where carga.dt_qua_liberacao is not null;   
+    
+-- *************fato contratacao
+
+   delete from t_binovo_gpds_fato_contr fc
+   where exists ( select 1 
+                  from t_binovo_gpds_dim_fap df
+                  where df.id_fap = fc.id_fap
+                  and df.uf_fap = p_uf)   
+-- sandro 18/12
+    and exists ( select 1 
+                  from t_binovo_gpds_dim_projeto dp
+                  where dp.refe = fc.refe
+                  and dp.programa = p_programa);  
+  
+   insert into t_binovo_gpds_fato_contr (refe, cnpj, id_fap, valor_finep /*verificar*/, valor_contrap_fap, valor_contrap_prop, valor_liberado, valor_aliberar,
+   dt_pri_liberacao, vl_pri_liberacao, dt_seg_liberacao, vl_seg_liberacao, dt_ter_liberacao, vl_ter_liberacao, dt_qua_liberacao, vl_qua_liberacao)
+   
+   select
+   carga2.refe, 
+    case
+      when carga2.cnpj like '%20.986.943/0001-42' then '20.986.943/0001-42'
+      when length(carga2.cnpj) = 18 then carga2.cnpj
+      when length(carga2.cnpj) = 14 then formata_cnpj(carga2.cnpj)
+      when length(carga2.cnpj) = 13 then formata_cnpj('0' || carga2.cnpj)
+      else
+        carga2.cnpj
+    end,
+
+   fap.id_fap, --id_fap
+   round(nvl(carga2.vl_partic_finep,0),2), -- verificar  
+   round(nvl(carga2.vl_contrap_fap,0),2),
+   round(nvl(carga2.vl_contrap_prop,0),2),
+   --Campos dos TECNOVA que não tem no CENTELHA
+   -- "Valor Liberado" : somar , para o modelo estrela, os valores liberados de cada parcela
+/*   case 
+      when upper(fp.programa) like '%CENTELHA%' then 
+       carga2.vl_pri_liberacao + carga2.vl_seg_liberacao + carga2.vl_ter_liberacao + carga2.vl_qua_liberacao
+       else 
+         carga2.vl_liberado
+    end,*/
+   round(nvl(carga2.vl_pri_liberacao,0) + 
+         nvl(carga2.vl_seg_liberacao,0) + 
+         nvl(carga2.vl_ter_liberacao,0) + 
+         nvl(carga2.vl_qua_liberacao,0),2), -- soma de todas as parcelas
+   round(nvl(carga2.vl_partic_finep,0) + nvl(carga2.vl_contrap_fap,0) - 
+         (nvl(carga2.vl_pri_liberacao,0) + nvl(carga2.vl_seg_liberacao,0) + nvl(carga2.vl_ter_liberacao,0) + nvl(carga2.vl_qua_liberacao,0)),2), --valor a liberar
+   carga2.dt_pri_liberacao,
+   round(nvl(carga2.vl_pri_liberacao,0),2),
+   carga2.dt_seg_liberacao,
+   round(nvl(carga2.vl_seg_liberacao,0),2),
+   carga2.dt_ter_liberacao,
+   round(nvl(carga2.vl_ter_liberacao,0),2),
+   carga2.dt_qua_liberacao,
+   round(nvl(carga2.vl_qua_liberacao,0),2)
+   
+     
+   
+   from t_binovo_gpds_carga_fap carga2
+   
+  
+       inner join T_BINOVO_GPDS_DIM_FAP fap
+       on fap.uf_fap = carga2.uf_empresa;
+
+end p_binovo_gpds_atualiza_estrela ;
