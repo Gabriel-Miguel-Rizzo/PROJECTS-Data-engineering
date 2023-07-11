@@ -1,0 +1,399 @@
+create or replace procedure p_dplan_identif_inconsis_teste is
+
+  v_qtde_dim_empresa_crd integer;
+  v_qtde_dim_projeto_crd integer;
+  v_qtde_fato_crd        integer;
+  v_qtde_distinct_crd    integer;
+  v_descricao_problema   t_dplan_identif_inconsistencia.ds_inconsist%type;
+  v_dados_problema       t_dplan_identif_inconsistencia.dados_inconsist%type;
+
+  -- para enviar email
+  v_assunto_email   varchar2(200);
+  v_mensagem_email  clob; --varchar2(1000);
+  v_nome_destinario varchar2(100);
+  v_remetente       varchar2(100);
+  v_destinatario    varchar2(100);
+  cn                utl_smtp.connection;
+  --  mensagem CLOB;
+
+begin
+
+  -- inconsistencias a serem verificadas
+
+  -- Passo (0) - limpar a base caso o processo rode mais de uma vez num mesmo dia
+
+  delete from T_DPLAN_IDENTIF_INCONSISTENCIA t
+   where t.dt_inconsist = f_dplan_binovo_get_dia_utl_ant(trunc(sysdate));
+
+  --************** (1) - valor liberado para o INOVACRED (ERP x Sistema INOVACRED)
+
+  insert into t_dplan_identif_inconsistencia
+    select f_dplan_binovo_get_dia_utl_ant(trunc(sysdate)) data_posicao,
+           'INOVACRED' sistema,
+           'Inconsistência' tipo_problema,
+           'Liberação' processo,
+           'Valor liberado aos beneficiários no exercicio não corresponde ao valor liberado aos agentes' descricao_problema,
+           'Refe: ' || t.ref || ' ; Data da Liberação : ' ||
+           to_char(t.dtliberacao, 'dd/mm/yyyy') || ' ; valor esperado = ' ||
+           nvl(valor_ics, 0) || ' ; valor encontrado: ' ||
+           nvl(valor_bes, 0) || '; Diferença:' ||
+           nvl(valor_ics - valor_bes, 0) dados_problema,
+           'Mauricio Marques' responsavel,
+           'mmarques@finep.gov.br' email_respnsavel
+      from (select A.REF,
+                   a.dtliberacao,
+                   sum(a.vlliberacao) valor_ics,
+                   valor_bes
+              from dagi_credito_liberacoes_ano a
+              left join (
+                        -- pode ocorrer mis de uma liberação por projeto num mesmo dia
+                        select 'IC' || substr(cr.codigo, 9, 2) || '/' ||
+                                substr(cr.codigo, 4, 2) as ref,
+                                trunc(pc.dataliberacao) dtliberacao,
+                                sum(pc.valor) valor_bes
+                        
+                          from inovacred_owner.agente a
+                        
+                         inner join uf
+                            on uf.sguf = a.uf
+                        
+                         inner join regiao re
+                            on re.cdregiao = uf.cdregiao
+                        
+                         inner join inovacred_owner.credenciamento cr
+                            on a.id = cr.agente_id
+                        
+                         inner join inovacred_owner.cartadedisponibilizacao cd1
+                            on cd1.credenciamento_id = cr.id
+                        
+                         inner join inovacred_owner.operacao o
+                            on o.cartadedisponibilizacao_id = cd1.id
+                        
+                         inner join inovacred_owner.operacaofinanceira fi
+                            on o.operacaofinanceira_id = fi.id
+                        
+                         inner join inovacred_owner.beneficiario be
+                            on be.id = o.beneficiario_id
+                        
+                          left join inovacred_owner.empresa em
+                            on em.cnpj = be.cnpj
+                        
+                         inner join inovacred_owner.parcela pc
+                            on fi.id = pc.operacaofinanceira_id
+                        
+                         where cr.status = 'A'
+                           and o.status = 'AT'
+                           and pc.dataliberacao is not null
+                        
+                         group by 'IC' || substr(cr.codigo, 9, 2) || '/' ||
+                                   substr(cr.codigo, 4, 2),
+                                   pc.dataliberacao) be
+                on be.ref = a.ref
+               and be.dtliberacao = a.dtliberacao
+            
+             where a.ref like 'IC%'
+            
+             group by a.ref, a.dtliberacao, valor_bes) t
+     where t.valor_ics <> valor_bes
+       and t.dtliberacao > '01/01/2020';
+
+  --************** (2) - Check dos dados do Finep Credito oriundos do OrientDB 
+
+  -- Comparar o nº de linhas das tabelas t_dplan_binovo_dim_empresa_crd, 
+  -- t_dplan_binovo_dim_projeto_crd e t_dplan_binovo_fato_inov_crd
+
+  select count(distinct qtde) num_distintos
+    into v_qtde_distinct_crd
+    from (select 'empresa' tabela, count(*) qtde
+            from t_dplan_binovo_dim_empresa_crd
+          union
+          select 'projeto', count(*)
+            from t_dplan_binovo_dim_projeto_crd
+          union
+          select 'fato', count(*) from t_dplan_binovo_fato_inov_crd);
+
+  -- ser o resultado for maior que um as tabelas 
+  -- estão com numero diferente de registros
+  if v_qtde_distinct_crd > 1 then
+    begin
+      select count(*) qtde
+        into v_qtde_dim_empresa_crd
+        from t_dplan_binovo_dim_empresa_crd;
+    
+      select count(*) qtde
+        into v_qtde_dim_projeto_crd
+        from t_dplan_binovo_dim_projeto_crd;
+    
+      select count(*) qtde
+        into v_qtde_fato_crd
+        from t_dplan_binovo_fato_inov_crd;
+    
+      v_descricao_problema := 'Número de registros nas tabelas carregadas do Finep Crédito não batem';
+      v_dados_problema     := 'Qtde na Tabela Fato: ' || v_qtde_fato_crd || '; ';
+      v_dados_problema     := v_dados_problema ||
+                              'Qtde na Dimensão Empresa: ' ||
+                              v_qtde_dim_empresa_crd || '; ';
+      v_dados_problema     := v_dados_problema ||
+                              'Qtde na Dimensão Projeto: ' ||
+                              v_qtde_dim_projeto_crd;
+    
+      insert into t_dplan_identif_inconsistencia
+        (dt_inconsist,
+         nm_sistema_inconsist,
+         tp_inconsist,
+         proc_inconsist,
+         ds_inconsist,
+         dados_inconsist,
+         nmresp_ajuste,
+         emresp_ajuste)
+      values
+        (f_dplan_binovo_get_dia_utl_ant(trunc(sysdate)),
+         'Finep Crédito',
+         'Inconsistência',
+         'Cadastro',
+         v_descricao_problema,
+         v_dados_problema,
+         'Geilson Fonte',
+         'gsfonte@finep.gov.br');
+    end;
+  end if;
+
+  --************** (3) - Ultima liberação registrada excedeu 2 semanas após a ultima liberação. 
+  -- Checar se houve carga
+
+  insert into t_dplan_identif_inconsistencia
+    select f_dplan_binovo_get_dia_utl_ant(trunc(sysdate)) data_posicao,
+           'ERP' sistema,
+           'Aviso' tipo_problema,
+           'Liberação' processo,
+           'Ultima liberação registrada excedeu 2 semanas. Checar se houve algum erro carga dos vouchers' descricao_problema,
+           'Data da ultima liberação: ' ||
+           to_char(dtultimalib, 'dd/mm/yyyy') dados_problema,
+           'Lucia Pinho',
+           'lpinho@finep.gov.br'
+      from (select max(lib.dtliberacao) dtultimalib,
+                   f_dplan_binovo_get_dia_utl_ant(trunc(sysdate)) - 14 dtCheck
+              from dagi_credito_liberacoes_ano lib) b
+     where dtultimalib < dtCheck;
+
+  --************** (4) - Projeto Contratado sem Data de Assinatura no Finep Crédito
+
+  insert into t_dplan_identif_inconsistencia
+    select f_dplan_binovo_get_dia_utl_ant(trunc(sysdate)) data_posicao,
+           'Finep Crédito',
+           'Inconsistência',
+           'Cadastro',
+           'Projeto Codificado sem Data de Assinatura no Finep Crédito',
+           'Referencia : ' || refe || '; Data da codificação: ' ||
+           to_char(dtCodificacao, 'dd/mm/yyyy'),
+           'Geilson Fonte',
+           'gsfonte@finep.gov.br'
+      from (select a.ref refe, v.DT_FIM dtCodificacao
+              from t_dplan_binovo_dim_projeto_crd a
+             inner join v_dplan_binovo_atividades_fc v
+                on v.REFE = a.ref
+             where v.ATIVIDADE = 'Codificação do Contrato'
+               and v.STATUS = 'Finalizada'
+               and a.dtassinatura = '01/01/1900'
+               and a.status = 'Em contratação') b;
+
+  --************** (5) - Projeto que passou na RD1 sem data de RD1 no Finep Crédito
+
+  -- projetos sem data de RD1 mas como a atividade 'Decisão de Diretoria' finalizada
+
+  insert into t_dplan_identif_inconsistencia
+    select f_dplan_binovo_get_dia_utl_ant(trunc(sysdate)) data_posicao,
+           'Finep Crédito',
+           'Inconsistência',
+           'Cadastro',
+           'Projeto que passou na 1ª RD sem Data de RD1 no Finep Crédito',
+           'Referencia : ' || refe ||
+           '; Data Fim da Atividade "Decisão de Diretoria" do processo "Análise do Projeto": ' ||
+           to_char(DT_FIM, 'dd/mm/yyyy'),
+           'Geilson Fonte',
+           'gsfonte@finep.gov.br'
+      from (
+            --select a.ref refe, a.data_cpsf , a.data_cep , v.DT_FIM, a.status
+            select a.ref refe, v.DT_FIM
+              from t_dplan_binovo_dim_projeto_crd a
+             inner join v_dplan_binovo_atividades_fc v
+                on v.REFE = a.ref
+             where v.ATIVIDADE = 'Decisão de Diretoria'
+               and v.PROCESSO = 'Análise do Projeto'
+               and v.STATUS = 'Finalizada'
+               and a.DATA_RD1 = '01/01/1900') b;
+
+  --************** (6) - Projeto que passou na RD2 sem data de RD2 no Finep Crédito
+
+  -- projetos sem data de RD2 mas como a atividade 'Decisão de Diretoria' finalizada
+
+  insert into t_dplan_identif_inconsistencia
+    select f_dplan_binovo_get_dia_utl_ant(trunc(sysdate)) data_posicao,
+           'Finep Crédito',
+           'Inconsistência',
+           'Cadastro',
+           'Projeto que passou na 2ª RD sem Data de RD2 no Finep Crédito',
+           'Referencia : ' || refe ||
+           '; Data Fim da Atividade "Decisão de Diretoria" do processo "Análise Jurídica": ' ||
+           to_char(DT_FIM, 'dd/mm/yyyy'),
+           'Geilson Fonte',
+           'gsfonte@finep.gov.br'
+      from (
+            --select a.ref refe, a.data_cpsf , a.data_cep , v.DT_FIM, a.status
+            select a.ref refe, v.DT_FIM
+              from t_dplan_binovo_dim_projeto_crd a
+             inner join v_dplan_binovo_atividades_fc v
+                on v.REFE = a.ref
+             where v.ATIVIDADE = 'Decisão de Diretoria'
+               and v.PROCESSO = 'Análise Jurídica e de Garantias'
+               and v.STATUS = 'Finalizada'
+               and a.DATA_RD2 = '01/01/1900') b;
+
+  --************** (7) - Projeto que passou na RD1 sem data de RD1 no Finep Crédito
+
+  insert into t_dplan_identif_inconsistencia
+    select f_dplan_binovo_get_dia_utl_ant(trunc(sysdate)) data_posicao,
+           'Finep Crédito',
+           'Inconsistência',
+           'Cadastro',
+           'Projeto que passou na 1ª RD mas status está inconsistente',
+           'Referencia : ' || refe ||
+           '; Data RD1 : ' || to_char(DATA_RD1, 'dd/mm/yyyy') ||
+           '; Status : '   || STATUS,
+           'Geilson Fonte',
+           'gsfonte@finep.gov.br'
+      from (
+          select T.REF refe, T.DATA_RD1, T.STATUS --, 'ANALISE MERITO' problema
+          from T_DPLAN_BINOVO_GR_DIM_PROJ_CRD t 
+          WHERE T.DATA_RD1 > '01/01/1900' 
+          AND T.STATUS not in ( 'Indeferido','Em análise (jurídico e garantias)',
+                              'Em contratação','Aguardando registro','Em execução')
+          );
+          
+  --************** (8) - Projeto que passou na RD2 sem data de RD2 no Finep Crédito          
+  
+  insert into t_dplan_identif_inconsistencia
+    select f_dplan_binovo_get_dia_utl_ant(trunc(sysdate)) data_posicao,
+           'Finep Crédito',
+           'Inconsistência',
+           'Cadastro',
+           'Projeto que passou na 2ª RD mas status está inconsistente',
+           'Referencia : ' || refe ||
+           '; Data RD1 : ' || to_char(DATA_RD2, 'dd/mm/yyyy') ||
+           '; Status : '   || STATUS,
+           'Geilson Fonte',
+           'gsfonte@finep.gov.br'
+      from (
+          select T.REF REFE, T.DATA_RD2, T.STATUS--, 'ANALISE JURIDICA' problema
+          from T_DPLAN_BINOVO_GR_DIM_PROJ_CRD t 
+          WHERE T.DATA_RD2 > '01/01/1900' 
+          AND T.STATUS not in ('Indeferido','Em contratação','Aguardando registro','Em execução')
+          );
+
+  --************** (9) - Projeto codificado sem data de assinatura no Finep Crédito
+  
+  insert into t_dplan_identif_inconsistencia
+    select f_dplan_binovo_get_dia_utl_ant(trunc(sysdate)) data_posicao,
+           'Finep Crédito',
+           'Inconsistência',
+           'Cadastro',
+           'Projeto codificado mas status está inconsistente',
+           'Referencia : ' || refe ||
+           '; Data RD1 : ' || to_char(DATA_RD2, 'dd/mm/yyyy') ||
+           '; Status : '   || STATUS,
+           'Geilson Fonte',
+           'gsfonte@finep.gov.br'
+      from (
+          select T.REF REFE, T.DATA_RD2, T.STATUS--, 'ANALISE JURIDICA' problema
+          from T_DPLAN_BINOVO_GR_DIM_PROJ_CRD t 
+          WHERE T.Dtassinatura > '01/01/1900' 
+          AND T.STATUS not in ('Aguardando registro','Em execução')
+          );
+
+  -- ESPAÇO RESERVADO PARA A INCLUSÃO DE NOVOS CHECKS
+
+  -- temporário
+
+  /*   update t_dplan_identif_inconsistencia a
+  set a.nmresp_ajuste = 'Sandro Souza' --"Responsável pela verificação",
+  , a.emresp_ajuste = 'sandros@finep.gov.br';*/
+
+  commit;
+
+  -- ******** envio de email das inconsistencias encontradas
+
+  for c in (select a.dt_inconsist,
+                   a.nm_sistema_inconsist,
+                   a.tp_inconsist,
+                   a.proc_inconsist,
+                   a.ds_inconsist,
+                   a.dados_inconsist,
+                   a.nmresp_ajuste,
+                   a.emresp_ajuste
+              from t_dplan_identif_inconsistencia a
+             where a.dt_inconsist =
+                   f_dplan_binovo_get_dia_utl_ant(trunc(sysdate))) loop
+    begin
+    
+      -- Cabeçalho
+      v_remetente          := 'sandros@finep.gov.br';
+      v_destinatario       := 'sandros@finep.gov.br';--c.emresp_ajuste;
+      v_nome_destinario    := 'sandro souza';--c.nmresp_ajuste;
+      v_descricao_problema := c.ds_inconsist;
+      v_dados_problema     := c.dados_inconsist;
+      v_assunto_email      := 'Mensagem automática Problema de inconsistência na base gerencial (SIGFS)';
+    
+      -- Mensagem
+      v_mensagem_email := 'Prezado ' || v_nome_destinario || ',' ||
+                          '<br><br>';
+      v_mensagem_email := v_mensagem_email ||
+                          'Identificamos a seguinte situação na base gerencial (SIGFS)' || ':' ||
+                          '<br><br>';
+      v_mensagem_email := v_mensagem_email || '"' || v_descricao_problema || '"' ||
+                          '<br><br>';
+      v_mensagem_email := v_mensagem_email || 'Informação adicional --> ' ||
+                          v_dados_problema || '<br><br>';
+      v_mensagem_email := v_mensagem_email ||
+                          'Peço por gentileza a verificação' || '<br><br>';
+      v_mensagem_email := v_mensagem_email || 'Att' || '<br><br>';
+      v_mensagem_email := v_mensagem_email || 'DPLAN';
+    
+      --mensagem := 'O conteúdo da mensagem é: ' || p_mensagem;
+      cn := utl_smtp.open_connection('xmail.finep.gov.br');
+      utl_smtp.helo(cn, 'xmail.finep.gov.br');
+      utl_smtp.mail(cn, v_remetente); --'<sigfs@finep.gov.br>');
+      utl_smtp.rcpt(cn, v_destinatario); --'<sandros@finep.gov.br>');
+      utl_smtp.rcpt(cn, '<sandros@finep.gov.br>');
+      utl_smtp.open_data(cn);
+      utl_smtp.write_data(cn, 'MIME-version: 1.0' || UTL_TCP.CRLF);
+      utl_smtp.write_data(cn,
+                          'Content-Type: text/html;charset=iso-8859-1' ||
+                          UTL_TCP.CRLF);
+      utl_smtp.write_data(cn,
+                          'Content-Transfer-Encoding: quoted-printable ' ||
+                          UTL_TCP.CRLF);
+      --    utl_smtp.write_data(c, 'From: remetente@finep.gov.br' || utl_tcp.CRLF);
+      --    utl_smtp.write_data(c, 'To: destinatario@finep.gov.br' || utl_tcp.CRLF);
+      utl_smtp.write_data(cn, 'From: ' || v_remetente || utl_tcp.CRLF);
+      utl_smtp.write_data(cn,
+                          'To: ' || v_destinatario ||
+                          ';sandros@finep.gov.br' || utl_tcp.CRLF);
+      utl_smtp.write_data(cn,
+                          'Content-Transfer-Encoding: 8bit' || UTL_TCP.CRLF);
+      utl_smtp.write_data(cn, 'Subject: ' || v_assunto_email);
+      --    utl_smtp.write_data(c, 'Subject: Relatório mensal ');
+      utl_smtp.write_raw_data(cn,
+                              UTL_RAW.CAST_TO_RAW(UTL_TCP.CRLF || ' ' ||
+                                                  UTL_TCP.CRLF)); -- linha obrigatória
+      --    utl_smtp.write_data(cn, v_mensagem_email); -- conteúdo
+      utl_smtp.write_raw_data(cn,
+                              UTL_RAW.CAST_TO_RAW(UTL_TCP.CRLF ||
+                                                  v_mensagem_email ||
+                                                  UTL_TCP.CRLF)); -- conteúdo
+      utl_smtp.close_data(cn);
+      utl_smtp.quit(cn);
+    
+    end;
+  end loop;
+
+end p_dplan_identif_inconsis_teste;
