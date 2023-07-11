@@ -1,0 +1,477 @@
+select formata_ref(p.nrreferencia) as "Ref.",
+       mp.modalidade as "Instrumento",                              -- Não sei se desejam o audiovisual (pode ser feito um case/when para transformálo em N. Reembolsável) 
+       case 
+         when mp.modalidade in ('Subvenção') then 'Não Reembolsável' 
+         else mp.modalidade
+       end "Identificação de Apoio" ,--'Não Reembolsável' as "Identificação de Apoio" ,
+       CASE
+         WHEN D.IDDEMANDA IN (243,284,340,386,387,457,458,512,513) THEN 'Indireto' -- programas descentralizados
+       ELSE -- os repasses são os TEDs enviados ao CNPq - não estão na Intranet
+         'Direto' 
+       end  as "Tipo de Apoio" ,                                    
+       /*d.nmdemanda*/ decode(td.cdtipodemanda,2,'Chamada Pública',td.cdtipodemanda) as "Tipo de Demanda" ,                           -- Informações diferem das requisitadas.. talvez necessário implementar uma estrutura condicional
+       d.nmdemanda as "Demanda" ,                                              
+       /*to_char(*/d.iddemanda/*)*/ as "Código da Demanda" ,                           
+       /*to_char(*/d.nranodemanda/*)*/ as "Ano Demanda" ,
+       ci.dtassinatura as "Data Assinatura" ,
+       c.dtutilizacao as "Prazo de execução" ,
+       c.cdcontratofinep as "Contrato" ,
+       p.dstituloprojeto as "Título" ,
+
+       app.nmpessoa as "Proponente" ,
+       formata_cnpj(app.nrcnpj) as "CNPJ Proponente" ,
+       /*NULL*/pjdr.cnae_principal as "CNAE Proponente" ,                                   -- Informações CNAE do Proponente (Não Encontrado)
+       /*NULL*/nvl(FXPORTE.DS_PORTE,'Não informado') as "Porte Proponente",                 -- Informações Porte do Proponente (Não Encontrado)
+       NULL as "Rating inovação proponente",                                                -- Informações Rating Inv. do Proponente (Não Encontrado)
+       app.sguf as "UF Proponente",                                     
+       app.nmmunicipio as "Município  Proponente",                             
+       app.dsregiao as "Região Proponente",                                 
+/*     -- pode existir mais de um interveniente - tem que ser uma tabela separada - outro SQL 
+        api.nmpessoa as "Interveniente",                                     
+       formata_cnpj(api.nrcnpj) as "CNPJ Interveniente",                               
+       NULL as "CNAE Interveniente",                                -- Informações Cnae Interveniente (Não Encontrado)
+       NULL as "Porte Interveniente",                               -- Informações Porte Interveniente (Não Encontrado)
+       api.sguf as "UF Interveniente",                                  
+       api.nmmunicipio as "Município  Interveniente",                          
+       api.dsregiao as "Região Interveniente",                              
+*/       ape.nmpessoa as "Executor",                                  
+       formata_cnpj(ape.nrcnpj) as "CNPJ Executor",                               
+       /*NULL*/pjdr_exe.cnae_principal as "CNAE Executor",                                     -- Informações Cnae Executor (Não Encontrado)
+       /*NULL*/nvl(FXPORTE_EXE.DS_PORTE,'Não informado') as "Porte Executor",                  -- Informações Porte Executor (Não Encontrado)
+       ape.sguf as "UF executor",                                   
+       ape.nmmunicipio as "Município  executor",                    
+       ape.dsregiao as "Região executor" ,                          
+       dfp.valor_total_projeto as "Valor total do Contrato" , 
+       dfp.valor_finep as "Valor Finep" ,
+       dfp.valor_bolsas as "Valor Bolsas" ,
+       dfp.contrapartidafinanceira as "Contrapartida Financeira" ,
+       dfp.contrapartidanaofinanceira as "Contrapartida Não-Financeira" ,
+       cnae.cnae as "CNAE Projeto" ,
+       -- um projeto não reembolsável possui mais de uma área de conhecimento. Outro SQL
+/*       NULL as "Area Conhecimento Projeto",                          --(Não Encontrado)
+*/       
+       p.dsobjetivoprojeto as "Objetivo Geral do Projeto",                          
+       --NULL as "Descrição do Projeto",                               --(Não Encontrado) "Não temos esta informação"
+       --NULL as "Área geográfica de execução",                        --(Não Encontrado) "Não temos esta informação"
+       -- um projeto reembolsável possui mais de uma Linha de Crédito. Outro SQL
+       --NULL as "Linhas de Crédito",                                  --(Linhas de crédito nao existem para não reembolsável)(Nulo)
+       palavra_chave_projeto(p.cdprojeto,p.nrversao, 1) as "Palavra Chave 1",
+       palavra_chave_projeto(p.cdprojeto,p.nrversao, 2) as "Palavra Chave 2",
+       palavra_chave_projeto(p.cdprojeto,p.nrversao, 3) as "Palavra Chave 3"
+       
+
+from v_dados_projeto p
+
+join v_modalidade_projeto mp
+on mp.cdprojeto = p.cdprojeto
+
+inner join v_dados_contrato_consolidado c
+on c.cdprojeto = p.cdprojeto
+and c.nrversao = p.nrversao
+
+inner join contrato ci
+on ci.cdcontrato = c.cdcontrato and ci.nrversaocontrato = 1
+
+inner join v_dados_financeiros_projeto dfp
+on dfp.cdprojeto = p.cdprojeto
+
+inner join v_depto_projeto_dagi depto
+on depto.cdprojeto = p.cdprojeto
+and depto.nrversao = p.nrversao
+
+inner join v_associa_pessoa_projeto app
+on app.cdprojeto = p.cdprojeto
+and app.nrversao = p.nrversao
+and app.cdparticipacao = 1
+
+inner join v_associa_pessoa_projeto ape
+on ape.cdprojeto = p.cdprojeto
+and ape.nrversao = p.nrversao
+and ape.cdparticipacao = 2
+
+/*left join v_associa_pessoa_projeto api  --Nova tabela
+on ape.cdprojeto = p.cdprojeto
+and ape.nrversao = p.nrversao
+and ape.cdparticipacao = 3
+*/
+inner join demanda d
+on d.iddemanda = p.iddemanda
+
+inner join tipo_fundo tf
+on tf.cdtipofundo = d.cdtipofundo
+
+-- data de aprovação dos projetos
+left join (select rd.cdprojeto, rd.nrversao, r.dtreuniao
+                        from comdir.projeto_reuniao rd
+                        join comdir.reuniao r on r.nrreuniao = rd.nrreuniao and r.cdtiporeuniao = rd.cdtiporeuniao
+                       where rd.cdtiporeuniao = 2 -- Diretoria
+                         and rd.tpnrdecisao = 'D'
+                         and rd.cdparecer in (1, 12)) r
+  on  r.cdprojeto = p.cdprojeto
+  and r.nrversao = p.nrversao
+
+inner join proposta_financiamento pf
+on pf.nrproposta = p.nrproposta
+
+inner join protocolo prt
+on prt.iddemanda = pf.iddemanda
+and prt.protocolo = pf.nrprotocolo
+
+  left join
+ (select ctp.cdprojeto,ctp.nrversao,ctp.iddemanda,dbms_lob.substr(ctp.clcampo,4000)objetivo
+            from campos_txt_proj ctp
+            inner join tipos_campos_texto tcp
+            on tcp.iddemanda = ctp.iddemanda
+            and tcp.cdcampotexto = ctp.cdcampo
+            and tcp.dscampotexto like 'Objetivo Geral%'
+            where ctp.cdseqitem = (select max(cdseqitem) from campos_txt_proj ctp2
+                                   where ctp2.nrversao = ctp.nrversao
+                                   and ctp2.cdprojeto = ctp.cdprojeto
+                                   and ctp2.cdcampo = ctp.cdcampo)
+            group by ctp.cdprojeto,ctp.nrversao,ctp.iddemanda,dbms_lob.substr(ctp.clcampo,4000)
+                      )ctp
+             on ctp.cdprojeto = p.cdprojeto
+             and ctp.nrversao = p.nrversao
+             and ctp.iddemanda = p.iddemanda
+
+ left join associa_classif_projeto assclas1
+       on assclas1.cdprojeto = p.cdprojeto
+       and assclas1.nrversao = p.nrversao
+       and assclas1.cdclassprojeto = 32
+
+ left join item_classif_projeto it1
+       on it1.nritemclasprojeto = assclas1.nritemclasprojeto
+       and it1.cdclassprojeto = 32
+
+left join v_tecnicos_projeto tp
+on tp.cdprojeto = p.cdprojeto
+and tp.nrversao = p.nrversao
+and tp.tptecnico = 'ACOMPANHAMENTO'
+
+left join ( select pj.nrpessoa, coalesce(cnae2primario, cnae2secundario, cnae1) as cnae
+            from pessoa_juridica pj
+            left join (select acp.nrpessoa, listagg(ic.dsitensclassif, '; ') WITHIN GROUP (ORDER BY ic.dsitensclassif) as cnae2primario
+                       from associa_classif_pessoa acp
+                       join itens_classificacao ic on ic.cdtipoclassif = acp.cdtipoclassif and ic.nritemclassif = acp.nritemclassif
+                       where ic.cdtipoclassif = 5 -- Atividade Econï¿½mica Predominante (CNAE2) - Primï¿½rio
+                       group by acp.nrpessoa) cnae2
+              on cnae2.nrpessoa = pj.nrpessoa
+            left join (select acp.nrpessoa, listagg(ic.dsitensclassif, '; ') WITHIN GROUP (ORDER BY ic.dsitensclassif) as cnae2secundario
+                       from associa_classif_pessoa acp
+                       join itens_classificacao ic on ic.cdtipoclassif = acp.cdtipoclassif and ic.nritemclassif = acp.nritemclassif
+                       where ic.cdtipoclassif = 6 -- Atividade Econï¿½mica Predominante (CNAE2) - Secundï¿½rio
+                       group by acp.nrpessoa) cnae2sec
+              on cnae2sec.nrpessoa = pj.nrpessoa
+            left join (select acp.nrpessoa, listagg(ic.dsitensclassif, '; ') WITHIN GROUP (ORDER BY ic.dsitensclassif) as cnae1
+                       from associa_classif_pessoa acp
+                       join itens_classificacao ic on ic.cdtipoclassif = acp.cdtipoclassif and ic.nritemclassif = acp.nritemclassif
+                       where ic.cdtipoclassif = 4 -- Atividade Econï¿½mica Predominante (CNAE)
+                       group by acp.nrpessoa) cnae1
+              on cnae1.nrpessoa = pj.nrpessoa) cnae
+  on cnae.nrpessoa = app.nrpessoa
+
+-- sandro : Tipo de Demanda
+inner join tipo_demanda td
+on td.cdtipodemanda = d.cdtipodemanda
+
+-- sandro (CNAE)
+left join pessoa_juridica_dados_receita pjdr
+on pjdr.cnpj = formata_cnpj(app.nrcnpj)
+
+-- sandro (CNAE-Executor)
+left join pessoa_juridica_dados_receita pjdr_exe
+on pjdr_exe.cnpj = formata_cnpj(ape.nrcnpj)
+
+-- sandro (PORTE)
+inner join pessoa_juridica pj
+on pj.nrpessoa = app.nrpessoa
+
+LEFT JOIN DPLAN_FAIXA_PORTE_EMPRESAS_BI FXPORTE
+ON pj.vlfaturamento >=  FXPORTE.VL_INICIAL
+AND pj.vlfaturamento <= FXPORTE.VL_FINAL
+AND CASE
+    WHEN TO_CHAR(prt.data_chegada,'MM') IN ('01','02','03','04') THEN '31/12/' || TO_NUMBER(TO_CHAR(prt.data_chegada,'YYYY') - 2)
+    ELSE '31/12/' || TO_NUMBER(TO_CHAR(prt.data_chegada,'YYYY') - 1)
+    END  >= FXPORTE.DT_INICIAL
+AND CASE
+    WHEN TO_CHAR(prt.data_chegada,'MM') IN ('01','02','03','04') THEN '31/12/' || TO_NUMBER(TO_CHAR(prt.data_chegada,'YYYY') - 2)
+    ELSE '31/12/' || TO_NUMBER(TO_CHAR(prt.data_chegada,'YYYY') - 1)
+    END  <= FXPORTE.DT_FINAL
+
+-- sandro (PORTE-Executor)
+inner join pessoa_juridica pj_exe
+on pj_exe.nrpessoa = ape.nrpessoa
+
+LEFT JOIN DPLAN_FAIXA_PORTE_EMPRESAS_BI FXPORTE_EXE
+ON pj_exe.vlfaturamento >=  FXPORTE_EXE.VL_INICIAL
+AND pj_exe.vlfaturamento <= FXPORTE_EXE.VL_FINAL
+AND CASE
+    WHEN TO_CHAR(prt.data_chegada,'MM') IN ('01','02','03','04') THEN '31/12/' || TO_NUMBER(TO_CHAR(prt.data_chegada,'YYYY') - 2)
+    ELSE '31/12/' || TO_NUMBER(TO_CHAR(prt.data_chegada,'YYYY') - 1)
+    END  >= FXPORTE_EXE.DT_INICIAL
+AND CASE
+    WHEN TO_CHAR(prt.data_chegada,'MM') IN ('01','02','03','04') THEN '31/12/' || TO_NUMBER(TO_CHAR(prt.data_chegada,'YYYY') - 2)
+    ELSE '31/12/' || TO_NUMBER(TO_CHAR(prt.data_chegada,'YYYY') - 1)
+    END  <= FXPORTE_EXE.DT_FINAL
+
+where p.dsstatus <> 'EM CONTRATAÇÃO' -- sandro 01/08/2022 (novo procidmento de contratação)
+and formata_ref(p.nrreferencia) not in -- sandro 04/05/2022 (eliminar projetos rescindidos no mesmo ano da contratação)
+(
+select distinct refe --, a.cdstatus, analise.projeto_ativo(p.cdprojeto,p.nrversao) status, trunc(a.dtencerramento) data_encerramento, p.dtassinatura
+from analise.contrato_encerrado a, contrato c, (select distinct drf.cdprojeto,drf.dtassinatura,nrversao,drf.refe from dagi_relatorio_fundos drf ) p
+where dtencerramento is not null
+and a.cdcontrato = c.cdcontrato
+and c.cdprojeto = p.cdprojeto
+and a.cdstatus = 2 -- rescindido
+and analise.projeto_ativo(p.cdprojeto,p.nrversao) = 'RESCINDIDO'
+and to_char(a.dtencerramento,'yyyy') = to_char(p.dtassinatura,'yyyy')
+)
+AND mp.modalidade <> 'Audiovisual' -- sandro
+/*and exists (select 1
+              from analise.arquivamento arq
+             where arq.cdprojeto = p.cdprojeto
+             and arq.nrversao = p.nrversao
+             and to_char(arq.dtarquivamento,'yyyy') = to_char(ci.dtassinatura,'yyyy')
+)
+*/
+
+-- INOVACRED - Cartas de Disponibilização de recursos
+union all  --1 -- (Não Reembolsável + Reembolsável)
+
+select fat.ref,
+       'Reembolsável',
+       'Reembolsável',
+       /*'Apoio Descentralizado'*/'Indireto' ,           --Dúvida se poderia usar as flags para saber se são cartas ou não.
+       /*NULL*/'Não se Aplica',                          --Provavelmente não existe esta informação para crédito
+       /*'Não se aplica'*/'INOVACRED' ,
+       /*'Não se aplica'*/NULL ,                         -- necessita ter o mesmo tipo de dado
+       /*'Não se aplica'*/NULL , 
+       dp.dtassinatura ,
+       trunc(cd.datafim) prazo_execucao ,
+       fat.cdcontratofinep ,
+       dp.dstitulo_projeto ,
+
+       de.prop_razao_social ,
+       de.prop_cnpj ,
+       de.cnae_principal/*NULL*/ ,                   -- Não encontrado cnae do proponente inovacred
+       'Não de Aplica'/*NULL*/ ,                     -- Porte Proponente
+       'Não se Aplica'/*NULL*/ ,                     -- Rating Inovação Proponente
+       de.prop_uf ,
+       de.prop_municipio ,
+       de.prop_regiao ,
+       de.prop_razao_social ,  
+       de.prop_cnpj ,
+       de.cnae_principal /*NULL*/ ,                     --cnae executor
+       'Não de Aplica'/*NULL*/ ,                        --Porte executor
+       de.prop_uf ,
+       de.prop_municipio ,
+       de.prop_regiao , 
+       fat.valor_total ,
+       fat.valor_finep ,
+       0 ,
+       fat.valor_total - fat.valor_finep ,
+       /*NULL*/0 ,
+       'Não se Aplica'/*de.cnae_divisao_emp*/ , -- Não é um projeto, mas sim um repasse de recursos
+       dp.dsobjetivo ,
+       NULL ,   --Chaves (NULO)
+       NULL ,   --Chaves (NULO)
+       NULL     --Chaves (NULO)
+       
+
+from t_dplan_binovo_fato_inovacao fat
+
+inner join t_dplan_binovo_dim_projeto dp
+on dp.ref = fat.ref
+ and dp.data_cpsf = fat.data_cpsf
+ and dp.cdcontratofinep = fat.cdcontratofinep
+
+inner join t_dplan_binovo_dim_empresa de
+on de.ref = fat.ref
+ and de.prop_cnpj = fat.prop_cnpj
+
+/* sandro : não precisa pegar nenhuma informação lá
+inner join t_dplan_binovo_dim_depto dd
+on dd.sgdepto = fat.depto
+*/
+inner join inovacred_owner.cartadedisponibilizacao cd
+on cd.codigofinep = fat.cdcontratofinep
+and trunc(cd.dataemissao) = dp.dtassinatura
+
+where fat.sistema_origem = 'INOVACRED-Agente'
+
+-- Finep Inovação
+union --2 -- Crédito (Crédito Indireto + Crédito Direto)
+
+select  t30.ref ,
+        'Reembolsável' ,
+        'Reembolsável' ,
+        /*'Apoio Direto'*/'Direto' , 
+        /*NULL*/'Demanda Espontânea' ,             --Provavelmente não existe esta informação para crédito
+        /*'Não se aplica'*/'Finep Inovação' ,
+        /*'Não se aplica' */null,
+        /*'Não se aplica'*/null , 
+        tc.dtassinatura ,
+        add_months(tc.dtassinatura, t30.prazo_utilizacao) ,
+        tc.cdcontratofinep ,
+        t30.dstitulo_projeto ,
+        t30.prop_razao_social , 
+        t30.prop_cnpj ,
+        pjdr.cnae_principal,
+       /*NULL*/nvl(FXPORTE.DS_PORTE,'Não informado') as "Porte Proponente",                                  -- Informações Porte do Proponente (Não Encontrado)
+        t30.dsrating_inov_empresa ,             -- dúvida se é este o campo coreto
+        t30.prop_uf ,
+        t30.prop_municipio ,
+        re.sgregiao ,
+/*        NULL ,                                  -- Informações Interveniente 
+        NULL ,                                  -- Informações Interveniente 
+        NULL ,                                  -- Informações Interveniente 
+        NULL ,                                  -- Informações Interveniente 
+        NULL ,                                  -- Informações Interveniente 
+        NULL ,                                  -- Informações Interveniente 
+        NULL ,                                  -- Informações Interveniente 
+*/ 
+        t30.exec_razao_social,/*t30.prop_razao_social ,*/
+        t30.exec_cnpj,/*t30.prop_cnpj ,*/
+        pjdr_exe.cnae_principal ,               --Cnae executor  (dúvida do uso da coluna t30.dscnae) (nao encontrado)
+        NULL ,                                  --Porte executor (nao encontrado)
+        t30.exec_uf,/*t30.prop_uf ,*/
+        t30.exec_municipio,/*t30.prop_municipio ,*/
+        re_exe.sgregiao,/*re.sgregiao,*/
+        t30.valor_contrapartida + t30.valor_finep ,
+        t30.valor_finep,
+        0 ,
+        T30.VALOR_CONTRAPARTIDA , 
+        /*NULL */0,
+        t30.dscnaeproj,/*t30.dscnae ,*/
+        t30.dsobjetivo ,
+        NULL ,  --Chaves (NULO)
+        NULL ,  --Chaves (NULO)
+        NULL    --Chaves (NULO)
+
+from dagi_finep30dias_proj_dbruto t30
+
+inner join analise.uf
+on uf.sguf = t30.prop_uf
+
+inner join analise.regiao re    
+on re.cdregiao = uf.cdregiao
+
+inner join DAGI_FINEP30DIAS_CONTRAT tc
+on tc.ref = t30.ref
+
+left join dagi_status_projeto_30dias s
+on s.ref = t30.ref
+
+left join (select ref, sum(l.vlliberacao) valor_pago
+           from dagi_credito_liberacoes_ano l
+           group by ref) lib
+on lib.ref = t30.ref
+
+left join  nova_intranet.v_usuario tana
+on tana.matric_usuario = t30.numat_analista_oper
+
+-- sandro
+LEFT JOIN DPLAN_FAIXA_PORTE_EMPRESAS_BI FXPORTE
+ON coalesce(t30.vlreceita_op_bruta,t30.vlreceita_op_liquida) >=  FXPORTE.VL_INICIAL
+AND coalesce(t30.vlreceita_op_bruta,t30.vlreceita_op_liquida) <= FXPORTE.VL_FINAL
+AND CASE
+    WHEN TO_CHAR(t30.data_cpsf,'MM') IN ('01','02','03','04') THEN '31/12/' || TO_NUMBER(TO_CHAR(t30.data_cpsf,'YYYY') - 2)
+    ELSE '31/12/' || TO_NUMBER(TO_CHAR(t30.data_cpsf,'YYYY') - 1)
+    END  >= FXPORTE.DT_INICIAL
+AND CASE
+    WHEN TO_CHAR(t30.data_cpsf,'MM') IN ('01','02','03','04') THEN '31/12/' || TO_NUMBER(TO_CHAR(t30.data_cpsf,'YYYY') - 2)
+    ELSE '31/12/' || TO_NUMBER(TO_CHAR(t30.data_cpsf,'YYYY') - 1)
+    END  <= FXPORTE.DT_FINAL
+
+-- sandro (CNAE)
+left join pessoa_juridica_dados_receita pjdr
+on pjdr.cnpj = t30.prop_cnpj
+
+-- sandro (CNAE-Executor)
+left join pessoa_juridica_dados_receita pjdr_exe
+on pjdr_exe.cnpj = t30.exec_cnpj
+
+-- sandro
+inner join analise.uf uf_exe
+on uf_exe.sguf = t30.exec_uf
+
+inner join analise.regiao re_exe    -- ALTERAÇÃO DE "R" PARA "RE"
+on re_exe.cdregiao = uf_exe.cdregiao
+    
+where t30.ref <> '0062/18' -- projeto canelado no mesmo ano da assinatura -- sandro 04/05/2022
+
+-- Finep Crédito
+union all --3 -- (Finep Inovação + Finep Crédito)
+
+select fi.ref "Ref." ,
+       'Reembolsável' "Instrumento" ,
+       'Reembolsável' "Identificação de Apoio" ,
+       /*'Apoio Direto'*/'Direto' "Tipo de Apoio" , 
+       /*NULL*/'Demanda Espontânea' "Tipo de Demanda" ,         --Provavelmente não existe esta informação para crédito
+       /*'Não se aplica'*/'Finep Crédito' "Demanda" ,
+       /*'Não se aplica'*/null "Código demanda" ,
+       /*'Não se aplica'*/null "Ano Demanda" ,
+       dp.dtassinatura "Data Assinatura",
+       null "Prazo Execução" ,
+       fi.cdcontratofinep "Contrato" ,
+       dp.dstitulo_projeto ,
+       de.prop_razao_social ,
+       de.prop_cnpj ,
+       de.cnae_principal ,                   -- cnae do proponente finep credito (nao encontrado)
+       de.porte ,               -- duvida 
+       /*NULL*/de.dsrating_inov_empresa ,  --não existe
+       de.prop_uf "UF Proponente" ,
+       de.prop_municipio "Município Proponente" ,
+       de.prop_regiao "Região Proponente" ,
+/*       NULL ,  --Interveniente
+       NULL ,  --Interveniente
+       NULL ,  --Interveniente
+       NULL ,  --Interveniente
+       NULL ,  --Interveniente
+       NULL ,  --Interveniente
+       NULL ,  --Interveniente
+       NULL ,  --Executor
+*/
+       de.prop_razao_social ,
+       de.prop_cnpj ,
+       de.cnae_principal ,                   -- cnae do proponente finep credito (nao encontrado)
+       de.porte ,               -- duvida 
+       de.prop_uf "UF Executor" ,
+       de.prop_municipio "Município Executor" ,
+       de.prop_regiao "Região Executor" ,
+       fi.valor_total "Valor Total do Contrato",
+       fi.valor_finep "Valor Finep",
+       /*NULL*/0 "Valor Bolsas",
+       fi.valor_total - fi.valor_finep "Contrapartida Financeira", 
+       /*NULL*/0 ,
+       /*dp.dsdenominacao_div*/ dp_crd.dscnaeproj "CNAE" , -- CNAE Principal só tem lá
+       dp.dsobjetivo ,
+       NULL ,  --Chaves (NULO)
+       NULL ,  --Chaves (NULO)
+       NULL    --Chaves (NULO)
+  
+from t_dplan_binovo_fato_inovacao fi
+
+inner join t_dplan_binovo_dim_projeto dp
+on dp.ref = fi.ref
+
+inner join t_dplan_binovo_dim_empresa de
+on de.ref = fi.ref
+
+left join T_DPLAN_BINOVO_DIM_DEPTO dd
+on dd.sgdepto = fi.depto
+/*
+left join (select ref, sum(l.vlliberacao) valor_pago
+           from dagi_credito_liberacoes_ano l
+           group by ref) lib
+on lib.ref = fi.ref
+*/
+-- sandro
+inner join t_dplan_binovo_dim_projeto dp_crd
+on dp_crd.ref = fi.ref
+
+where fi.sistema_origem = 'Finep Crédito'
+and fi.cdcontratofinep <> '-'
+and to_char(dp.dtassinatura,'yyyy') <> to_char(dp.data_cancelamento) -- sandro 04/05/2022
+
+order by 1
