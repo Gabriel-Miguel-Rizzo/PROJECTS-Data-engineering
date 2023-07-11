@@ -1,10 +1,6 @@
 create or replace procedure p_binovo_gpds_atualiza_estrela (p_uf in varchar2, p_programa in varchar2) as  -- cria a procedure para carregar o tabela de carga para as fap's
 
-/*
-18/12/2022 : Sandro 
-Inseri o parametro p_programa e inclui nos deletes 
- - Exemplo RS que tem 2 arquivos - TECNOVA e CENTELHA. Um estava apagando o conteudo do outro
-*/
+
  --f_dplan_binovo_get_dia_utl_ant(trunc(sysdate)), -- data da posição da ultima carga realizada    ---> codigo que poderá ser utilizado para o nosso grafico.
  --v_id_fap number;
 begin
