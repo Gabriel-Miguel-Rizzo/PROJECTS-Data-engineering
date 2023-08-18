@@ -1,0 +1,99 @@
+CREATE OR REPLACE PROCEDURE P_APLA_BI_ORCFIN_ETL (p_tipo in varchar2) IS
+
+-- Obs: código ainda não revisado.
+
+BEGIN
+
+IF p_tipo = 'Orçamento' THEN
+BEGIN
+
+
+
+DELETE FROM T_APLA_BI_ACOF_FATO_ORCFIN fof
+WHERE upper(fof.evento) like '%ORÇAMENTO_UTILIZADO%' ;
+
+INSERT INTO T_APLA_BI_ACOF_FATO_ORCFIN
+
+
+ SELECT      'Orçamento Utilizado',
+                br.projetone,
+                br.datane,
+                br.valorne,
+                coalesce(ac.id_acao,ac_cnpq.id_acao),
+                br.emprefne,
+                br.PTRESNE,
+                case
+                   when br.PTRESNE in ('204535','204533') then 'Taxa e Despesas'
+                   when br.PTRESNE = '172671' then 'Participação em Fundos'
+                   when br.PTRESNE = '172669' then 'Subvenção'
+                   when br.PTRESNE = '172670' then 'Equalização'
+                   when br.PTRESNE in ('204531','204534','204537','204529','204538','204539','204540','204541','204530') then 'TEDs OSs'
+                   when upper(br.proponenteproj) like '%CNPQ%' then 'TEDs CNPq'
+                   else 'Convênios e demais TEDs'
+                end    "Tipo de Instrumento",
+                decode (tu."Título",null,br.tituloproj,tu."Título"),
+                decode (tu."Proponente",null,br.proponenteproj,tu."Proponente"),
+                'Orçamento do Ano'
+                
+    from t_apla_bi_acof_or_dado_bruto br
+    
+    left join t_apla_bi_acof_or_dim_acao_orc ac
+    on upper(br.identificacao_acao) = upper(ac.nm_acao_orc)
+
+    left join t_apla_bi_acof_or_dim_acao_orc ac_cnpq
+    on upper(ac_cnpq.nm_acao_orc) like 'PROJETOS INSTITUCIONAIS DE C%'
+    
+    left join t_dplan_tudao tu
+    on tu."Ref" = br.projetone
+    
+    where br.restosne = 'N';
+
+
+END;
+ELSE
+BEGIN
+
+DELETE FROM T_APLA_BI_ACOF_FATO_ORCFIN fof
+WHERE upper(fof.evento) like '%FINANCEIRO%' ;
+
+INSERT INTO T_APLA_BI_ACOF_FATO_ORCFIN
+
+
+ SELECT      'Financeiro' evento,
+                brf.projetone,
+                brf.dataob,
+                brf.valorob,
+                coalesce(ac.id_acao,ac_cnpq.id_acao),
+                brf.numob,
+                brf.ptresne,
+                case
+                   when brf.PTRESNE in ('204535','204533') then 'Secretaria-Executiva'
+                   when brf.PTRESNE = '172671' then 'Investimento em Fundos'
+                   when brf.PTRESNE = '172669' then 'Subvenção'
+                   when brf.PTRESNE = '172670' then 'Equalização'
+                   when brf.PTRESNE in ('204531','204534','204537','204529','204538','204539','204540','204541','204530') then 'Organizações Sociais'
+                   when upper(brf.proponenteproj) like '%CNPQ%' then 'CNPq'
+                   else 'Fundações e ICTs'
+                end    "Tipo de Instrumento",
+                decode (tu."Título",null,brf.tituloproj,tu."Título"),
+                decode (tu."Proponente",null,brf.projetone,tu."Proponente"),
+                decode(brf.restosne,'FALSO','Orçamento do Ano','Restos a Pagar')
+                
+    from t_apla_bi_acof_fn_dado_bruto brf
+    
+    left join t_apla_bi_acof_or_dim_acao_orc ac
+    on upper(brf.identificacao_acao) = upper(ac.nm_acao_orc)
+
+    left join t_apla_bi_acof_or_dim_acao_orc ac_cnpq
+    on upper(ac_cnpq.nm_acao_orc) like 'PROJETOS INSTITUCIONAIS DE C%'
+    
+    left join t_dplan_tudao tu
+    on tu."Ref" = brf.projetone;
+
+
+
+END;
+END IF;
+
+COMMIT;
+END;
