@@ -1,0 +1,38 @@
+CREATE OR REPLACE PROCEDURE P_APLA_BI_ARREC_POS (p_data in date) IS
+numInconsist NUMBER;
+
+BEGIN
+
+-------- Conta a quantidade de inconsistências (informações da tabela de dado bruto que NÃO possuem natureza classificada).
+
+  select count(*)
+  into numInconsist
+  from t_apla_bi_acof_arrec_dadobruto adb
+  where NOT EXISTS 
+        (select 1
+         from t_apla_bi_acof_dim_natrec_arr nra
+
+          inner join t_apla_bi_acof_dim_fonte_arrec far
+          on nra.id_fonte_arrec = far.id
+          
+           where adb.nat = nra.codigo
+           and adb.fonte = far.codigo
+           );
+           
+--------- Estrutura de repetição Simples que checa a existência de inconsistências. Caso haja ao menos uma, envia o email de erro ao Sandro.
+
+  IF numInconsist = 0 THEN
+  begin
+    p_apla_bi_arrec_pos_etl1 (p_data);                -- procedure insert into da FATO
+    carregar_arrecadacao (p_data);                    -- Cria tabela auxiliar de Valor Projetado & Arrecadado / Mês
+    carregar_DTatualizacao_Arrec (p_data);            -- Carrega a data da última atualização na Tabela;
+  end;
+  ELSE
+   begin
+    p_apla_bi_arrec_pos_envioemail (p_data);
+   end;
+  END IF;
+
+  commit;
+  
+END; 
