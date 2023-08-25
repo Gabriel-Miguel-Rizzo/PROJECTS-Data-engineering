@@ -1,0 +1,31 @@
+CREATE OR REPLACE PROCEDURE P_APLA_BI_ARREC_POS_ETL1 (p_data in date) IS
+
+
+
+BEGIN
+
+      DELETE FROM t_apla_bi_acof_fato_arrecad far
+      WHERE far.mes   =  to_number(to_char(p_data,'mm'))
+      and  far.ano   =  to_number(to_char(p_data,'yyyy'));
+
+      INSERT INTO t_apla_bi_acof_fato_arrecad
+
+      SELECT to_number(to_char(p_data,'yyyy')),
+              to_number(to_char(p_data,'mm')),
+              nar.id,
+              adb.valor_do_mes
+
+
+      FROM t_apla_bi_acof_arrec_dadobruto adb
+
+      INNER JOIN t_apla_bi_acof_dim_natrec_arr nar
+      on adb.nat = nar.codigo 
+
+      inner join t_apla_bi_acof_dim_fonte_arrec far
+      on adb.fonte = far.codigo
+      and nar.id_fonte_arrec = far.id;
+
+
+
+COMMIT;
+END;
