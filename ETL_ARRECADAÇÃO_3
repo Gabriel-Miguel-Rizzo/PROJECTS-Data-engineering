@@ -1,0 +1,155 @@
+create or replace procedure p_apla_bi_arrec_pos_envioemail (p_data in date) IS
+
+numInconsist NUMBER;
+
+v_remetente        varchar2(100);
+v_destinatario     varchar2(100);
+v_destinatario_cc2 varchar2(100);
+v_nome_destinario  varchar2(100);
+v_assunto_email    varchar2(200);
+v_mensagem_email   clob;
+cn                 utl_smtp.connection;
+
+BEGIN
+
+
+  select count(*)
+    into numInconsist
+    from t_apla_bi_acof_arrec_dadobruto adb
+    where NOT EXISTS 
+          (select 1
+           from t_apla_bi_acof_dim_natrec_arr nra
+
+            inner join t_apla_bi_acof_dim_fonte_arrec far
+            on nra.id_fonte_arrec = far.id
+            
+             where adb.nat = nra.codigo
+             and adb.fonte = far.codigo
+             );
+
+
+  ---- Parte de envio do email -------
+
+   IF numInconsist = 0 /* and...*/ THEN
+   BEGIN    -- caso não haja inconsistências.
+
+    v_remetente          := 'sandros@finep.gov.br';
+    v_destinatario       := 'sandros@finep.gov.br';
+    v_nome_destinario    := 'Sandro Souza';
+    v_assunto_email      := 'Mensagem automática - Carga dos dados do fundo de arrecadação do FNDCT carregados com sucesso!' ;
+
+    -- Body
+    v_mensagem_email := 'Carga dos dados do fundo de arrecadação do FNDCT carregados com sucesso na data de: ';
+    v_mensagem_email := v_mensagem_email || to_char(p_data,'dd/mm/yyyy')  || '<br><br>';
+
+
+
+
+--  v_mensagem_email := v_mensagem_email || '<br><br>';
+    v_mensagem_email := v_mensagem_email || 'Att' || '<br><br>';
+    v_mensagem_email := v_mensagem_email || 'DGPI';
+
+      --mensagem := 'O conteúdo da mensagem é: ' || p_mensagem;
+    cn := utl_smtp.open_connection('xmail.finep.gov.br');
+    utl_smtp.helo(cn, 'xmail.finep.gov.br');
+    utl_smtp.mail(cn, v_remetente); --'<sigfs@finep.gov.br>');
+    utl_smtp.rcpt(cn, v_destinatario); --'<sandros@finep.gov.br>');
+    utl_smtp.rcpt(cn, '<sandros@finep.gov.br>');
+    utl_smtp.open_data(cn);
+    utl_smtp.write_data(cn, 'MIME-version: 1.0' || UTL_TCP.CRLF);
+    utl_smtp.write_data(cn,
+                        'Content-Type: text/html;charset=iso-8859-1' ||
+                        UTL_TCP.CRLF);
+    utl_smtp.write_data(cn,
+                        'Content-Transfer-Encoding: quoted-printable ' ||
+                        UTL_TCP.CRLF);
+    --    utl_smtp.write_data(c, 'From: remetente@finep.gov.br' || utl_tcp.CRLF);
+    --    utl_smtp.write_data(c, 'To: destinatario@finep.gov.br' || utl_tcp.CRLF);
+    utl_smtp.write_data(cn, 'From: ' || v_remetente || utl_tcp.CRLF);
+    utl_smtp.write_data(cn,
+                        'To: ' || v_destinatario ||
+                        ';sandros@finep.gov.br' || utl_tcp.CRLF);
+    utl_smtp.write_data(cn,
+                        'Content-Transfer-Encoding: 8bit' || UTL_TCP.CRLF);
+    utl_smtp.write_data(cn, 'Subject: ' || v_assunto_email);
+    --    utl_smtp.write_data(c, 'Subject: Relatório mensal ');
+    utl_smtp.write_raw_data(cn,
+                            UTL_RAW.CAST_TO_RAW(UTL_TCP.CRLF || ' ' ||
+                                                UTL_TCP.CRLF)); -- linha obrigatória
+    --    utl_smtp.write_data(cn, v_mensagem_email); -- conteúdo
+    utl_smtp.write_raw_data(cn,
+                            UTL_RAW.CAST_TO_RAW(UTL_TCP.CRLF ||
+                                                v_mensagem_email ||
+                                                UTL_TCP.CRLF)); -- conteúdo
+    utl_smtp.close_data(cn);
+    utl_smtp.quit(cn);
+END;
+ELSE
+   BEGIN  -- caso haja inconsistências.
+  -- Head
+    v_remetente          := 'sandros@finep.gov.br';
+    v_destinatario       := 'sandros@finep.gov.br';
+    v_nome_destinario    := 'Sandro Souza';
+    v_destinatario_cc2   := 'rizzo@finep.gov.br';
+    v_assunto_email      := 'Mensagem automática - Inconsistência na carga dos dados do fundo de arrecadação do FNDCT' || ' Data: ' || to_char(p_data,'dd/mm/yyyy');
+
+    -- Body
+
+    v_mensagem_email := 'Prezado/a ' || v_nome_destinario || ',' ||
+                        '<br><br>';
+
+    v_mensagem_email := v_mensagem_email ||
+                       'Identificamos a seguinte situação na carga do arquivo Excel contendo os dados dos fundos de arrecadação do FNDCT"' || ' na data: ' || to_char(p_data,'dd/mm/yyyy') || '<br><br>';
+
+
+    v_mensagem_email := v_mensagem_email
+                     || 'Existe: ' || numInconsist || 'nova(s) natureza(s) de arrecadação não mapeada(s) na base de dados do fundo de arrecadação do FNDCT' || '<br><br>';
+
+
+
+--    v_mensagem_email := v_mensagem_email || '<br><br>';
+
+    v_mensagem_email := v_mensagem_email || 'Peço por gentileza a verificação' || '<br><br>';
+    v_mensagem_email := v_mensagem_email || 'Att' || '<br><br>';
+    v_mensagem_email := v_mensagem_email || 'DGPI';
+
+      --mensagem := 'O conteúdo da mensagem é: ' || p_mensagem;
+    cn := utl_smtp.open_connection('xmail.finep.gov.br');
+    utl_smtp.helo(cn, 'xmail.finep.gov.br');
+    utl_smtp.mail(cn, v_remetente); --'<sigfs@finep.gov.br>');
+    utl_smtp.rcpt(cn, v_destinatario); --'<sandros@finep.gov.br>');
+    utl_smtp.rcpt(cn, '<sandros@finep.gov.br>');
+    utl_smtp.rcpt(cn, v_destinatario_cc2);
+    utl_smtp.open_data(cn);
+    utl_smtp.write_data(cn, 'MIME-version: 1.0' || UTL_TCP.CRLF);
+    utl_smtp.write_data(cn,
+                        'Content-Type: text/html;charset=iso-8859-1' ||
+                        UTL_TCP.CRLF);
+    utl_smtp.write_data(cn,
+                        'Content-Transfer-Encoding: quoted-printable ' ||
+                        UTL_TCP.CRLF);
+    --    utl_smtp.write_data(c, 'From: remetente@finep.gov.br' || utl_tcp.CRLF);
+    --    utl_smtp.write_data(c, 'To: destinatario@finep.gov.br' || utl_tcp.CRLF);
+    utl_smtp.write_data(cn, 'From: ' || v_remetente || utl_tcp.CRLF);
+    utl_smtp.write_data(cn,
+                        'To: ' || v_destinatario ||
+                        ';sandros@finep.gov.br' || utl_tcp.CRLF);
+    utl_smtp.write_data(cn,
+                        'Content-Transfer-Encoding: 8bit' || UTL_TCP.CRLF);
+    utl_smtp.write_data(cn, 'Subject: ' || v_assunto_email);
+    --    utl_smtp.write_data(c, 'Subject: Relatório mensal ');
+    utl_smtp.write_raw_data(cn,
+                            UTL_RAW.CAST_TO_RAW(UTL_TCP.CRLF || ' ' ||
+                                                UTL_TCP.CRLF)); -- linha obrigatória
+    --    utl_smtp.write_data(cn, v_mensagem_email); -- conteúdo
+    utl_smtp.write_raw_data(cn,
+                            UTL_RAW.CAST_TO_RAW(UTL_TCP.CRLF ||
+                                                v_mensagem_email ||
+                                                UTL_TCP.CRLF)); -- conteúdo
+    utl_smtp.close_data(cn);
+    utl_smtp.quit(cn);
+
+END;
+END IF;
+
+END;
