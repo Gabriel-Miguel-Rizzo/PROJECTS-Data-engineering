@@ -1,0 +1,229 @@
+create or replace procedure p_apla_bi_acof_atualiza_ptres (p_data in date) as
+
+   v_qtde number;
+   v_max_id number;
+
+  v_descricao_problema   varchar2(4000);
+  v_dados_problema       varchar2(4000);
+
+  -- para enviar email
+  v_assunto_email   varchar2(200);
+  v_mensagem_email  clob; --varchar2(1000);
+  v_nome_destinario varchar2(100);
+  v_remetente       varchar2(100);
+  v_destinatario    varchar2(100);
+  cn                utl_smtp.connection;
+
+/*
+  Autor: SAndro SOuza
+  Data: 01/09/2023
+  Objetivo: atualizar a tabela de PTRES a partir da importação dos empenhos (orçamento utilizado)
+  que pode ser a primeira carga de um exercício (inserção) bem como cargas mensais
+*/
+
+begin
+
+  -- verificar se existem novas ações
+  select count(*) qtde
+  into v_qtde
+  from t_apla_bi_acof_or_dado_bruto oa
+  where not exists
+        ( select 1
+          from
+          (
+            select da.nm_acao
+            from t_apla_bi_acof_or_dado_bruto oa
+            inner join t_apla_bi_acof_dim_acao da
+            on upper(da.nm_acao) = upper(oa.identificacao_acao)
+            union
+            select po.nm_po
+            from t_apla_bi_acof_or_dado_bruto oa
+            inner join t_apla_bi_acof_dim_po po
+            on upper(po.nm_po) = upper(oa.identificacao_acao)
+            and not exists ( select 1
+                             from t_apla_bi_acof_dim_acao da
+                             where upper(da.nm_acao) = upper(oa.identificacao_acao))
+          ) acao
+          where upper(oa.identificacao_acao) = upper(acao.nm_acao)
+  );
+  if v_qtde > 0 then
+  -- se existir enviar e-mail ao Fabricio informando a necessidade de enviar informações sobre a nova ação
+  begin
+    v_descricao_problema := 'Não foi possível realizar a importação do arquivo de orçamento aprovado de ' || to_char(p_data,'yyyy') || ' ';
+    v_descricao_problema := v_descricao_problema || 'devido a necessidade de se cadastrar a(s) seguintes(s) Ações\PO:<br>';
+    for c in (select oa.identificacao_acao
+                from t_apla_bi_acof_or_dado_bruto oa
+                where not exists
+                      ( select 1
+                        from
+                        (
+                          select da.nm_acao
+                          from t_apla_bi_acof_or_dado_bruto oa
+                          inner join t_apla_bi_acof_dim_acao da
+                          on upper(da.nm_acao) = upper(oa.identificacao_acao)
+                          union
+                          select po.nm_po
+                          from t_apla_bi_acof_or_dado_bruto oa
+                          inner join t_apla_bi_acof_dim_po po
+                          on upper(po.nm_po) = upper(oa.identificacao_acao)
+                          and not exists ( select 1
+                                           from t_apla_bi_acof_dim_acao da
+                                           where upper(da.nm_acao) = upper(oa.identificacao_acao))
+                        ) acao
+                        where upper(oa.identificacao_acao) = upper(acao.nm_acao)
+              )) loop
+    begin
+         v_descricao_problema := v_descricao_problema || c.identificacao_acao || '<br>';
+    end;
+    end loop;
+    -- Cabeçalho
+    v_remetente          := 'sandros@finep.gov.br';
+    v_destinatario       := 'rizzo@finep.gov.br';
+    v_nome_destinario    := 'Gabriel Rizzo';
+    v_dados_problema     := '';
+    v_assunto_email      := 'Mensagem automática - Carga de Dotação orçamentária de ' || to_char(p_data,'yyyy');
+
+    -- Mensagem
+    v_mensagem_email := 'Prezado ' || v_nome_destinario || ',' ||
+                        '<br><br>';
+    v_mensagem_email := v_mensagem_email ||
+                        'Identificamos a seguinte situação' || ':' ||
+                        '<br><br>';
+    v_mensagem_email := v_mensagem_email || '"' || v_descricao_problema || '"' ||
+                        '<br><br>';
+    v_mensagem_email := v_mensagem_email || 'Informação adicional --> ' ||
+                        v_dados_problema || '<br><br>';
+    v_mensagem_email := v_mensagem_email ||
+                        'Peço por gentileza a verificação' || '<br><br>';
+    v_mensagem_email := v_mensagem_email || 'Att' || '<br><br>';
+    v_mensagem_email := v_mensagem_email || 'APLA';
+
+
+    cn := utl_smtp.open_connection('xmail.finep.gov.br');
+    utl_smtp.helo(cn, 'xmail.finep.gov.br');
+    utl_smtp.mail(cn, v_remetente); --'<sigfs@finep.gov.br>');
+    utl_smtp.rcpt(cn, v_destinatario); --'<sandros@finep.gov.br>');
+    utl_smtp.rcpt(cn, '<sandros@finep.gov.br>');
+    utl_smtp.open_data(cn);
+    utl_smtp.write_data(cn, 'MIME-version: 1.0' || UTL_TCP.CRLF);
+    utl_smtp.write_data(cn,
+                        'Content-Type: text/html;charset=iso-8859-1' ||
+                        UTL_TCP.CRLF);
+    utl_smtp.write_data(cn,
+                        'Content-Transfer-Encoding: quoted-printable ' ||
+                        UTL_TCP.CRLF);
+    --    utl_smtp.write_data(c, 'From: remetente@finep.gov.br' || utl_tcp.CRLF);
+    --    utl_smtp.write_data(c, 'To: destinatario@finep.gov.br' || utl_tcp.CRLF);
+    utl_smtp.write_data(cn, 'From: ' || v_remetente || utl_tcp.CRLF);
+    utl_smtp.write_data(cn,
+                        'To: ' || v_destinatario ||
+                        ';sandros@finep.gov.br' || utl_tcp.CRLF);
+    utl_smtp.write_data(cn,
+                        'Content-Transfer-Encoding: 8bit' || UTL_TCP.CRLF);
+    utl_smtp.write_data(cn, 'Subject: ' || v_assunto_email);
+    --    utl_smtp.write_data(c, 'Subject: Relatório mensal ');
+    utl_smtp.write_raw_data(cn,
+                            UTL_RAW.CAST_TO_RAW(UTL_TCP.CRLF || ' ' ||
+                                                UTL_TCP.CRLF)); -- linha obrigatória
+    --    utl_smtp.write_data(cn, v_mensagem_email); -- conteúdo
+    utl_smtp.write_raw_data(cn,
+                            UTL_RAW.CAST_TO_RAW(UTL_TCP.CRLF ||
+                                                v_mensagem_email ||
+                                                UTL_TCP.CRLF)); -- conteúdo
+    utl_smtp.close_data(cn);
+    utl_smtp.quit(cn);
+
+
+  end;
+  else
+  begin
+    -- se não existir novas ações
+    -- Testar se TODOS os PTRES estão cadastrados
+
+      -- exclui PTRES de ano atual
+--      delete from t_apla_bi_acof_dim_ptres_acao ptr
+--      where pt.ano = to_number(to_char(p_data,'yyyy'));
+
+      -- identifica o ultimo id_ptres cadastrado
+      select max(ptr.id_ptres) maxi
+      into v_max_id
+      from t_apla_bi_acof_dim_ptres_acao ptr;
+
+      -- insere os novos PTRES
+      insert into t_apla_bi_acof_dim_ptres_acao ptr
+      select v_max_id + rownum id_ptres,
+             to_number(to_char(p_data,'yyyy')) ano,
+             ptresne,
+             lista.id_po
+      from
+           (
+            -- todas as ações, exceto "Demais Ações"
+            select distinct odb.ptresne, odb.identificacao_acao, po.id_po/*, po.id_acao, UPPER(ac.nm_acao)*/
+            from t_apla_bi_acof_or_dado_bruto odb
+            left join t_apla_bi_acof_dim_po po
+            on upper(po.nm_po) = upper(odb.identificacao_acao)
+            left join t_apla_bi_acof_dim_acao ac
+            on ac.id_acao = po.id_acao
+            where upper(odb.identificacao_acao) <> 'DEMAIS AÇÕES'
+            union
+            -- Ação "Promoção de Eventos" (se tiver)
+            select distinct odb.ptresne, odb.identificacao_acao, po.id_po -- 54 id_po -- Ação "Promoção de Eventos"
+            from t_apla_bi_acof_or_dado_bruto odb
+            inner join t_apla_bi_acof_dim_po po
+            on upper(odb.identificacao_acao) = upper(po.nm_po)
+            inner join t_apla_bi_acof_dim_acao ac
+            on ac.id_acao = po.id_acao
+            where upper(odb.identificacao_acao) = 'DEMAIS AÇÕES'
+            and upper(ac.nm_acao) = 'PROMOÇÃO DE EVENTOS'
+            and exists ( select 1
+                         from projeto p
+                         inner join demanda d
+                         on d.iddemanda = p.iddemanda
+                         where d.cdtipodemanda = 67 -- eventos
+                         and formata_ref(p.nrreferencia) = odb.projetone
+                         union
+                         select 1
+                         from t_sisgon_projeto sp
+                         inner join t_sisgon_demanda sd
+                         on sd.iddemanda = sp.iddemanda
+                         where sd.modalidade = 'EVENTO'
+                         and sp.refe = odb.projetone
+                         )
+            union
+            -- Ação "PROJETOS INSTITUCIONAIS DE CIÊNCIA E TECNOLOGIA" (se tiver - normalmente tem)
+            select distinct odb.ptresne, odb.identificacao_acao, po.id_po -- 30 id_po -- Ação "PROJETOS INSTITUCIONAIS DE CIÊNCIA E TECNOLOGIA"
+            from t_apla_bi_acof_or_dado_bruto odb
+            inner join t_apla_bi_acof_dim_po po
+            on upper(odb.identificacao_acao) = upper(po.nm_po)
+            inner join t_apla_bi_acof_dim_acao ac
+            on ac.id_acao = po.id_acao
+            where upper(odb.identificacao_acao) = 'DEMAIS AÇÕES'
+            and upper(ac.nm_acao) = 'PROJETOS INSTITUCIONAIS DE CIÊNCIA E TECNOLOGIA'
+            and not exists ( select 1
+                         from projeto p
+                         inner join demanda d
+                         on d.iddemanda = p.iddemanda
+                         where d.cdtipodemanda = 67 -- eventos
+                         and formata_ref(p.nrreferencia) = odb.projetone
+                         union
+                         select 1
+                         from t_sisgon_projeto sp
+                         inner join t_sisgon_demanda sd
+                         on sd.iddemanda = sp.iddemanda
+                         where sd.modalidade = 'EVENTO'
+                         and sp.refe = odb.projetone
+                         )
+
+         ) lista
+
+         left join t_apla_bi_acof_dim_ptres_acao ptr
+         on lista.ptresne = ptr.ptres
+         and ptr.ano = to_number(to_char(p_data,'yyyy'))
+         
+         where ptr.id_ptres is null; -- apenas para os novos PTRES
+     end;
+  end if;
+  
+  
+
+end p_apla_bi_acof_atualiza_ptres;
