@@ -1,0 +1,27 @@
+
+
+DECLARE
+
+  CURSOR  employees_cursor  IS
+  SELECT  *
+  FROM    z_tabela_exercicio;
+  
+  employees_record  employees_cursor%rowtype; 
+  
+  
+BEGIN
+
+  FOR employees_record IN  employees_cursor
+  LOOP
+
+   
+    insert into z_tabela_exercicio3 (nome, cnpj, valor_investido)
+    values (employees_record.nome, 
+            employees_record.cnpj,
+            employees_record.valor_investido * 0.1 / 2);
+
+                        
+  EXIT WHEN  employees_cursor%notfound;
+  END LOOP;
+commit;
+END;
