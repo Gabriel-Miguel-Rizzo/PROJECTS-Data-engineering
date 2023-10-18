@@ -1,0 +1,65 @@
+CREATE OR REPLACE PROCEDURE p_apla_bi_acof_arpr_etl (p_data in date) is
+
+BEGIN
+
+       for c in (
+               SELECT so.id as id_setor_origem, 
+                      db.valor_projetado_jan, 
+                      db.valor_projetado_fev,
+                      db.valor_projetado_mar,
+                      db.valor_projetado_abr,
+                      db.valor_projetado_mai,
+                      db.valor_projetado_jun,
+                      db.valor_projetado_jul,
+                      db.valor_projetado_ago,
+                      db.valor_projetado_set,
+                      db.valor_projetado_out,
+                      db.valor_projetado_nov,
+                      db.valor_projetado_dez
+                     
+                FROM  T_APLA_BI_ACOF_ARPR_DADO_BRUTO db
+                INNER JOIN t_apla_bi_acof_dim_setor_orig so
+                ON upper(db.setor_origem) = upper(so.nome)         
+           ) loop
+         begin
+
+              INSERT INTO T_APLA_BI_ACOF_DIM_ARREC_PROJ ap
+              values (to_char(p_data,'yyyy'), 1, c.id_setor_origem, c.valor_projetado_jan );
+
+              INSERT INTO T_APLA_BI_ACOF_DIM_ARREC_PROJ ap
+              values (to_char(p_data,'yyyy'), 2, c.id_setor_origem, c.valor_projetado_fev );
+              
+              INSERT INTO T_APLA_BI_ACOF_DIM_ARREC_PROJ ap
+              values (to_char(p_data,'yyyy'), 3, c.id_setor_origem, c.valor_projetado_mar );
+              
+              INSERT INTO T_APLA_BI_ACOF_DIM_ARREC_PROJ ap
+              values (to_char(p_data,'yyyy'), 4, c.id_setor_origem, c.valor_projetado_abr );
+              
+              INSERT INTO T_APLA_BI_ACOF_DIM_ARREC_PROJ ap
+              values (to_char(p_data,'yyyy'), 5, c.id_setor_origem, c.valor_projetado_mai );
+              
+              INSERT INTO T_APLA_BI_ACOF_DIM_ARREC_PROJ ap
+              values (to_char(p_data,'yyyy'), 6, c.id_setor_origem, c.valor_projetado_jun );
+              
+              INSERT INTO T_APLA_BI_ACOF_DIM_ARREC_PROJ ap
+              values (to_char(p_data,'yyyy'), 7, c.id_setor_origem, c.valor_projetado_jul );
+              
+              INSERT INTO T_APLA_BI_ACOF_DIM_ARREC_PROJ ap
+              values (to_char(p_data,'yyyy'), 8, c.id_setor_origem, c.valor_projetado_ago );
+              
+              INSERT INTO T_APLA_BI_ACOF_DIM_ARREC_PROJ ap
+              values (to_char(p_data,'yyyy'), 9, c.id_setor_origem, c.valor_projetado_set );
+              
+              INSERT INTO T_APLA_BI_ACOF_DIM_ARREC_PROJ ap
+              values (to_char(p_data,'yyyy'), 10, c.id_setor_origem, c.valor_projetado_out );
+              
+              INSERT INTO T_APLA_BI_ACOF_DIM_ARREC_PROJ ap
+              values (to_char(p_data,'yyyy'), 11, c.id_setor_origem, c.valor_projetado_nov );
+              
+              INSERT INTO T_APLA_BI_ACOF_DIM_ARREC_PROJ ap
+              values (to_char(p_data,'yyyy'), 12, c.id_setor_origem, c.valor_projetado_dez );
+              
+           end;
+         end loop;
+
+END;
