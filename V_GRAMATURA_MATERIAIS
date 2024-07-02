@@ -1,0 +1,50 @@
+SELECT        TAB3.LOCAL_GRAMATURA, TAB3.GRAMATURA, ISNULL(CASE /*CASE 2*/ WHEN CHARINDEX('.', LEFT(TAB3.GRAMATURA, 6)) = 1 THEN RIGHT(TAB3.GRAMATURA, LEN(TAB3.GRAMATURA) - 1) WHEN CHARINDEX('.', 
+                         TAB3.GRAMATURA) = LEN(TAB3.GRAMATURA) /* OU SEJA, = 6 (MAX)*/ THEN CASE WHEN LEN(TAB3.GRAMATURA) > 0 THEN LEFT(TAB3.GRAMATURA, LEN(TAB3.GRAMATURA) - 1) END ELSE TAB3.GRAMATURA END, '') 
+                         GRAMATURA_NEW, TAB3.MATERIAL, TAB3.Padrão
+
+
+
+
+FROM            (SELECT        TAB2.LOCAL_GRAMATURA, REPLACE(TAB2.GRAMATURA, ',', '.') AS GRAMATURA, TAB2.MATERIAL, TAB2.Padrão
+
+
+
+                          FROM       
+						  
+						       (SELECT        TAB1.LOCAL_GRAMATURA, REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(CASE WHEN SUBSTRING(TAB1.LOCAL_GRAMATURA, PATINDEX('%[0-9,.]%', TAB1.LOCAL_GRAMATURA), 1) 
+
+
+                                                                              IN ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '.') THEN SUBSTRING(TAB1.LOCAL_GRAMATURA, PATINDEX('%[0-9,.]%', TAB1.LOCAL_GRAMATURA), 1) ELSE NULL END, '') 
+
+                                                                              + ISNULL(CASE WHEN SUBSTRING(TAB1.LOCAL_GRAMATURA, PATINDEX('%[0-9,.]%', TAB1.LOCAL_GRAMATURA) + 1, 1) IN ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '.') 
+
+                                                                              THEN SUBSTRING(TAB1.LOCAL_GRAMATURA, PATINDEX('%[0-9,.]%', TAB1.LOCAL_GRAMATURA) + 1, 1) ELSE NULL END, '') + ISNULL(CASE WHEN SUBSTRING(TAB1.LOCAL_GRAMATURA, 
+                                                                              PATINDEX('%[0-9,.]%', TAB1.LOCAL_GRAMATURA) + 2, 1) IN ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '.') THEN SUBSTRING(TAB1.LOCAL_GRAMATURA, PATINDEX('%[0-9,.]%', TAB1.LOCAL_GRAMATURA) 
+                                                                              + 2, 1) ELSE NULL END, '') + ISNULL(CASE WHEN SUBSTRING(TAB1.LOCAL_GRAMATURA, PATINDEX('%[0-9,.]%', TAB1.LOCAL_GRAMATURA) + 3, 1) IN ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '.') 
+                                                                              THEN SUBSTRING(TAB1.LOCAL_GRAMATURA, PATINDEX('%[0-9,.]%', TAB1.LOCAL_GRAMATURA) + 3, 1) ELSE NULL END, '') + ISNULL(CASE WHEN SUBSTRING(TAB1.LOCAL_GRAMATURA, 
+                                                                              PATINDEX('%[0-9,.]%', TAB1.LOCAL_GRAMATURA) + 4, 1) IN ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '.') THEN SUBSTRING(TAB1.LOCAL_GRAMATURA, PATINDEX('%[0-9,.]%', TAB1.LOCAL_GRAMATURA) 
+                                                                              + 4, 1) ELSE NULL END, '') + ISNULL(CASE WHEN SUBSTRING(TAB1.LOCAL_GRAMATURA, PATINDEX('%[0-9,.]%', TAB1.LOCAL_GRAMATURA) + 5, 1) IN ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '.') 
+                                                                              THEN SUBSTRING(TAB1.LOCAL_GRAMATURA, PATINDEX('%[0-9,.]%', TAB1.LOCAL_GRAMATURA) + 5, 1) ELSE NULL END, ''))), CHAR(13) + CHAR(10), ''), CHAR(13), ''), CHAR(10), ''), CHAR(9), '') 
+                                                                              GRAMATURA, 
+                                                                              /*REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(SUBSTRING(TAB1.LOCAL_GRAMATURA, PATINDEX('%[0-9]%', TAB1.LOCAL_GRAMATURA), 6))), CHAR(13) + CHAR(10) ,''),CHAR(13),''),CHAR(10),''),CHAR(9),'')  GRAMATURA2, --ANTIGA MANEIRA*/ TAB1.MATERIAL,
+                                                                               CASE WHEN LOWER(TAB1.LOCAL_GRAMATURA) LIKE '%k/g%' OR
+                                                                              LOWER(TAB1.LOCAL_GRAMATURA) LIKE '%kg%' OR
+                                                                              LOWER(TAB1.LOCAL_GRAMATURA) LIKE '%kg/m²%' OR
+                                                                              LOWER(TAB1.LOCAL_GRAMATURA) LIKE '%kg/m2%' THEN 'Kilo/Metro' WHEN LOWER(TAB1.LOCAL_GRAMATURA) LIKE '%g/m²%' OR
+                                                                              LOWER(TAB1.LOCAL_GRAMATURA) LIKE '%g/2%' OR
+                                                                              LOWER(TAB1.LOCAL_GRAMATURA) LIKE '%g/m%' OR
+                                                                              LOWER(TAB1.LOCAL_GRAMATURA) LIKE '%m/g%' OR
+                                                                              LOWER(TAB1.LOCAL_GRAMATURA) LIKE '%g/m%' OR
+                                                                              LOWER(TAB1.LOCAL_GRAMATURA) LIKE '%gr%' OR
+                                                                              LOWER(TAB1.LOCAL_GRAMATURA) LIKE '%g/m2%' OR
+                                                                              LOWER(TAB1.LOCAL_GRAMATURA) LIKE '%m/g2%' OR
+                                                                              LOWER(TAB1.LOCAL_GRAMATURA) LIKE '%gram/m²%' THEN 'Grama/Metro' ELSE 'ERRO: OUTLIER' END Padrão
+                                                    FROM            (SELECT        SUBSTRING(TRY_CAST(M.OBS AS VARCHAR(MAX)), CHARINDEX('gramatura', m.OBS), 25) AS LOCAL_GRAMATURA, m.MATERIAL, m.OBS
+                                                                              FROM            materiais m
+                                                                              WHERE        (m.OBS IS NOT NULL) AND (m.OBS LIKE '%GRAMATURA%' OR
+                                                                                                        m.OBS LIKE '%Gramatura%' OR
+                                                                                                        m.OBS LIKE '%gramatura%' OR
+                                                                                                        m.OBS LIKE '%gram%' OR
+                                                                                                        m.OBS LIKE '%GRAM%' OR
+                                                                                                        m.OBS LIKE '%Gram%')) TAB1
+                                                    WHERE        TAB1.LOCAL_GRAMATURA IS NOT NULL) TAB2) TAB3
