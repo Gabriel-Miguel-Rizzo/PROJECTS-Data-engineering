@@ -1,0 +1,21 @@
+SELECT DISTINCT 
+                         DESC_COMPOSICAO, REPLACE(LTRIM(REPLACE(CASE WHEN CHARINDEX('%', TAB1.GRUPO_COMP, CHARINDEX('%', TAB1.GRUPO_COMP) + 1) = 0 THEN TAB1.GRUPO_COMP WHEN CHARINDEX('%', TAB1.GRUPO_COMP, 
+                         CHARINDEX('%', TAB1.GRUPO_COMP, CHARINDEX('%', TAB1.GRUPO_COMP) + 1) + 1) = 0 THEN SUBSTRING(TAB1.GRUPO_COMP, 1, CHARINDEX('%', TAB1.GRUPO_COMP, CHARINDEX('%', TAB1.GRUPO_COMP) + 1) + 100) 
+                         ELSE SUBSTRING(TAB1.GRUPO_COMP, 1, CHARINDEX('%', TAB1.GRUPO_COMP, CHARINDEX('%', TAB1.GRUPO_COMP, CHARINDEX('%', TAB1.GRUPO_COMP) + 1) + 1) - 1) END, '%', ' ')), ' ', ' - ') AS GRUPO_COMP, 
+                         REPLACE(LTRIM(REPLACE(GRUPO_COMP, '%', ' ')), ' ', ' - ') AS SUBGRUPO_COMP
+
+
+
+FROM            (SELECT        mc.DESC_COMPOSICAO, 
+                                                    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(mc.DESC_COMPOSICAO,
+                                                     '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), ' ', ''), ',', ''), '.', ''), ':', ''), 'BASE', ''), 'Ã', 'A'), 'É', 'E'), '-', ''), '/', '') AS GRUPO_COMP
+
+
+                          FROM            dbo.MATERIAIS AS m INNER JOIN dbo.MATERIAIS_COMPOSICAO AS mc ON mc.COMPOSICAO = m.COMPOSICAO
+
+
+                          WHERE        (m.GRUPO IN ('MALHA', 'TECIDO'))) AS TAB1
+
+GROUP BY DESC_COMPOSICAO, REPLACE(LTRIM(REPLACE(CASE WHEN CHARINDEX('%', TAB1.GRUPO_COMP, CHARINDEX('%', TAB1.GRUPO_COMP) + 1) = 0 THEN TAB1.GRUPO_COMP WHEN CHARINDEX('%', TAB1.GRUPO_COMP, 
+                         CHARINDEX('%', TAB1.GRUPO_COMP, CHARINDEX('%', TAB1.GRUPO_COMP) + 1) + 1) = 0 THEN SUBSTRING(TAB1.GRUPO_COMP, 1, CHARINDEX('%', TAB1.GRUPO_COMP, CHARINDEX('%', TAB1.GRUPO_COMP) + 1) + 100) 
+                         ELSE SUBSTRING(TAB1.GRUPO_COMP, 1, CHARINDEX('%', TAB1.GRUPO_COMP, CHARINDEX('%', TAB1.GRUPO_COMP, CHARINDEX('%', TAB1.GRUPO_COMP) + 1) + 1) - 1) END, '%', ' ')), ' ', ' - '), GRUPO_COMP
