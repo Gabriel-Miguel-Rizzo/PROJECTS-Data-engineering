@@ -1,0 +1,137 @@
+
+WITH Tratamento1 AS (
+/* Aqui foi realizada a etapa 6 e 7 de chamar as colunas das duas tabelas e realiar a transformação para o tipo de dado correto*/
+SELECT 
+    --tt.produto,
+    --tt.dt_emissao,
+    /*tt.titulo AS SV_titulo, */
+    tt.Margem_perc AS SV_Margem_perc,
+    CASE
+    WHEN dt_emissao <> '' THEN date_parse(dt_emissao, '%Y%m%d') 
+    ELSE null
+    END AS dt_emissao,
+    CAST(vlr_item AS DOUBLE) vlr_item,
+    CAST(valor_frete AS DOUBLE) valor_frete,
+    CAST(preco_unitario AS DOUBLE) preco_unitario,
+    CAST(valor_icm AS DOUBLE) valor_icm,
+    CAST(custo_unitario AS DOUBLE) custo_unitario,
+    CAST(cmv_cd AS DOUBLE) cmv_cd,
+    CAST(cmv AS DOUBLE) cmv,
+    (CAST(cmv_cd AS DOUBLE) + CAST(valor_icm AS DOUBLE)  + CAST(valor_pis AS DOUBLE) + CAST(valor_cofins AS DOUBLE))
+    
+    AS Custo_Total, /* Aqui foi realizada a etapa 8 do calculo do Custo_Total */
+    CAST(valor_pis AS DOUBLE) valor_pis,
+    CAST(valor_cofins AS DOUBLE) valor_cofins,
+    TRIM(tt.produto) AS produto,
+    tt.quantidade,
+    TRIM(tt.filial) filial,
+    tt.vendedor
+    
+
+
+FROM (
+
+    SELECT 
+        mv.produto,
+        mv.dt_emissao,
+        mv.quantidade,
+        mv.vlr_item,
+        mv.valor_frete,
+        mv.acre_financ,
+        mv.preco_unitario,
+        mv.desconto,
+        mv.valor_desc,
+        mv.valor_icm,
+        mv.valor_pis,
+        mv.filial,
+        mv.nota_nf,
+        mv.valor_cofins,
+        mv.nota_fiscal,
+        mv.vendedor,
+        mv.serie,
+        mv.custo_unitario,
+        mv.cmv,
+        mv.b2_cm1cd AS cmv_cd,
+        TRIM(mv.produto) || '-' || TRIM(mv.dt_emissao) AS "ID-Servico",
+        ms.titulo,
+        ms.Margem_perc
+
+    FROM prod.fato_calculo_margem_vendas mv
+
+    LEFT JOIN (
+        SELECT 
+            titulo, 
+            dia_str, 
+            cod_produto, 
+            Margem_perc,
+            TRIM(cod_produto) || '-' || TRIM(dia_str) AS "ID-Servico"
+        FROM prod.fato_margem_servico_calendario
+    ) ms
+    ON TRIM(mv.produto) || '-' || TRIM(mv.dt_emissao) = ms."ID-Servico"
+    /*Aqui realizei as etapas 1,2,3,4 e 5. */
+    /*Realizei o Left join com a tabela de "Serviço Calendario" e criei a chave para realizar o join das duas tabelas. */
+    
+) tt
+) -- Etapas 1,2,3,4,5,6,7,8
+
+, Tratamento2 AS (
+/* Aqui foi realizado o calculo para as colunas de Margem e Venda_Liquida */
+SELECT T1.* ,(T1.vlr_item - T1.Custo_Total  ) AS Margem, (vlr_item - valor_icm - valor_pis - valor_cofins)   AS Venda_liquida
+
+
+
+FROM Tratamento1 T1
+)    -- Etapas 9 e 10
+
+, Tratamento3 AS (
+SELECT /*--T2.SV_titulo, */
+T2.SV_Margem_perc, T2.dt_emissao, T2.vlr_item AS Vlr_total /*Etapa 12 */, T2.valor_frete, T2.preco_unitario, T2.valor_icm
+,T2.custo_unitario, T2.cmv_cd, T2.cmv, T2.Custo_Total, T2.valor_pis, T2.valor_cofins, T2.produto, T2.Margem, T2.Venda_liquida, T2.quantidade,
+T2.filial, T2.vendedor,
+CASE 
+    WHEN T2.produto IN ('ICARD12K','ICARD09K','ICARD22K24K','ICARD18k','SEGCEL','GARANTIA','GEAV')   THEN  Margem * SV_Margem_perc
+    ELSE ( Margem - valor_frete ) 
+    END AS Margem_ajustada
+/* Etapa 11 de criação da coluna calculada de Margem_ajustada */
+FROM Tratamento2 T2
+)    -- Etapas 11 e 12
+
+, Tratamento4 AS (        -- Etapas 13 
+SELECT T3.*, 
+CAST (CASE
+   WHEN T3.produto IN ('ICARD12K','ICARD09K','ICARD22K24K','ICARD18k') THEN T3.Venda_liquida * (1 - T3.SV_Margem_perc)
+   WHEN T3.produto IN ('SEGCEL')                                       THEN T3.Vlr_total  - T3.Margem_ajustada
+   WHEN T3.produto IN ('GARANTIA', 'GEAV')                             THEN T3.Vlr_total  - T3.Margem_ajustada
+   ELSE T3.cmv / T3.quantidade
+
+END AS DOUBLE) AS Cmv_unitario
+
+FROM Tratamento3 T3
+)    -- 
+ 
+, Tratamento5 AS (
+SELECT T4.*, CAST((T4.Cmv_unitario * T4.quantidade) AS DOUBLE) AS cmv_total,
+CASE
+   WHEN T4.Cmv_unitario = 0 THEN T4.cmv_cd * T4.quantidade
+   ELSE T4.Cmv_unitario * T4.quantidade
+   END AS CMV_ajustado_TOTAL
+
+FROM Tratamento4 AS T4
+)
+
+
+SELECT /*T5.SV_titulo, */
+T5.SV_Margem_perc, T5.dt_emissao, T5.Vlr_total, T5.valor_frete, T5.valor_icm
+, T5.cmv_cd, T5.cmv, /*T5.valor_pis, T5.valor_cofins, */
+T5.produto, T5.Venda_liquida, T5.quantidade,
+T5.filial, T5.Margem_ajustada, T5.vendedor
+
+
+, T5.dt_emissao AS Data_mes
+
+FROM Tratamento5 T5
+--WHERE cast(dt_emissao AS DATE) = DATE '2018-12-04' -- TESTE PARA REDUÇÃO TEMPO QUERY
+
+
+-- TRIM() EM FILIAL
+
